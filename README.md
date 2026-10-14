@@ -160,6 +160,24 @@ Les fichiers de `logs/` sont créés par le conteneur (propriétaire root) et ig
 docker compose exec mysql sh -c 'rm -f /logs/*.log'
 ```
 
+## 6. Exécution automatique (crontab)
+
+Le fichier `crontab` lance le script toutes les heures pleines de 6h à 22h (6:00, 7:00, ... 22:00, soit 17 exécutions par jour) :
+
+```
+0 6-22 * * * cd /home/aia/workspace/claude/bash_sql && /usr/bin/docker compose exec -T mysql update_abandonnes.sh >/dev/null 2>&1
+```
+
+Le cron s'exécute sur la machine hôte et appelle le script dans le conteneur, qui doit donc être démarré (`docker compose up -d`). Adapter le chemin du projet dans `crontab` si besoin.
+
+```bash
+crontab crontab     # installe (ATTENTION : remplace le crontab existant de l'utilisateur)
+crontab -l          # vérifie
+crontab -r          # supprime le crontab de l'utilisateur
+```
+
+Chaque exécution ajoute un bloc dans le log du jour (voir section 5).
+
 ## Notes
 
 - Le mot de passe `root` en clair dans `docker-compose.yml` convient pour un test local uniquement.
