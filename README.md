@@ -1,6 +1,6 @@
 # MySQL e-commerce : conteneur, données et script de mise à jour
 
-Conteneur MySQL 8.4 avec une base `ecommerce`, une table `commande` pré-remplie, et un script bash qui passe les commandes `ABONDONNE` au statut `OK`.
+Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `commande`) pré-remplies, et un script bash qui passe au statut `OK` les commandes `ABONDONNE` des clients de France.
 
 ## Contenu
 
@@ -8,8 +8,8 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, une table `commande` pré-remplie
 |---|---|
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
-| `init.sql` | Création de la base, de la table `commande` et du jeu de données |
-| `update_abandonnes.sh` | Détecte les `ABONDONNE`, les passe à `OK`, écrit les logs |
+| `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
+| `update_abandonnes.sh` | Détecte les `ABONDONNE` des clients français, les passe à `OK`, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
 
 ## Prérequis
@@ -37,19 +37,35 @@ docker compose down
 
 ## 2. Générer les données
 
-Le jeu de données est créé automatiquement par `init.sql` **au premier démarrage** (base vide). Il contient 15 commandes :
+Le jeu de données est créé automatiquement par `init.sql` **au premier démarrage** (base vide) : 10 clients et 15 commandes.
 
-- statut `TERMINE` : 6
-- statut `EN_COURS` : 4
-- statut `ABONDONNE` : 5
+Clients : 6 en `France`, 4 en `Italie`.
 
-Structure de la table :
+Commandes (statut / pays du client) :
+
+| Statut | France | Italie | Total |
+|---|---|---|---|
+| `TERMINE` | 6 | 0 | 6 |
+| `EN_COURS` | 1 | 3 | 4 |
+| `ABONDONNE` | 3 | 2 | 5 |
+
+Table `client` :
+
+| Colonne | Type |
+|---|---|
+| `id` | INT, auto-incrément, clé primaire |
+| `nom` | VARCHAR(50) |
+| `prenom` | VARCHAR(50) |
+| `pays` | VARCHAR(30) : `France` ou `Italie` |
+| `adresse` | VARCHAR(150) |
+
+Table `commande` :
 
 | Colonne | Type |
 |---|---|
 | `id` | INT, auto-incrément, clé primaire |
 | `statut` | VARCHAR(20) : `TERMINE`, `EN_COURS`, `ABONDONNE` (puis `OK` après le script) |
-| `client_id` | INT |
+| `client_id` | INT, clé étrangère vers `client.id` |
 | `date` | DATE |
 | `prix` | DECIMAL(10,2) |
 | `produit_id` | INT |
@@ -85,7 +101,7 @@ Requête rapide sans session interactive :
 
 ```bash
 docker compose exec mysql mysql -uroot -proot ecommerce \
-  -e "SELECT statut, COUNT(*) FROM commande GROUP BY statut;"
+  -e "SELECT cl.pays, c.statut, COUNT(*) FROM commande c JOIN client cl ON cl.id = c.client_id GROUP BY cl.pays, c.statut;"
 ```
 
 ## 4. Lancer le script bash
@@ -97,8 +113,13 @@ docker compose exec mysql update_abandonnes.sh
 Le script :
 
 1. attend que MySQL accepte les connexions ;
-2. exécute `SELECT id, statut FROM commande WHERE statut = 'ABONDONNE'` ;
-3. construit la liste d'id (ex. `4,7,9,12,15`) ;
+2. exécute la requête suivante (seules les commandes de clients français sont retenues, les italiennes restent `ABONDONNE`) :
+   ```sql
+   SELECT c.id, c.statut, cl.pays
+   FROM commande c LEFT JOIN client cl ON cl.id = c.client_id
+   WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';
+   ```
+3. construit la liste d'id (ex. `4,9,15`) ;
 4. exécute `UPDATE commande SET statut = 'OK' WHERE id IN (...)` ;
 5. relit les lignes modifiées ;
 6. écrit tout le détail dans le fichier de log du jour (voir section 5).
@@ -107,23 +128,23 @@ Sortie attendue (identique au contenu ajouté au log) :
 
 ```
 === Lancement à 19:50 (2026-10-14) ===
---- Commandes détectées (id, statut) ---
-4	ABONDONNE
-7	ABONDONNE
-...
+--- Commandes détectées (id, statut, pays) ---
+4	ABONDONNE	France
+9	ABONDONNE	France
+15	ABONDONNE	France
 --- Liste des id ---
-4,7,9,12,15
---- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id) ---
-4	ABONDONNE	4	2026-02-10	89.99	104
+4,9,15
+--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id, pays) ---
+4	ABONDONNE	4	2026-02-10	89.99	104	France
 ...
 --- Requête exécutée ---
-UPDATE commande SET statut = 'OK' WHERE id IN (4,7,9,12,15);
---- Lignes mises à jour (id, statut, client_id, date, prix, produit_id) ---
-4	OK	4	2026-02-10	89.99	104
+UPDATE commande SET statut = 'OK' WHERE id IN (4,9,15);
+--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id, pays) ---
+4	OK	4	2026-02-10	89.99	104	France
 ...
 ```
 
-S'il n'y a plus de commande `ABONDONNE`, le script affiche `Aucune commande ABONDONNE.` et ne modifie rien.
+S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucune commande ABONDONNE pour la France.` et ne modifie rien.
 
 ### Variables d'environnement (optionnelles)
 
@@ -142,13 +163,13 @@ Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans 
 
 Chaque lancement du script **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
 
-- les commandes détectées (id, statut) ;
+- les commandes détectées (id, statut, pays) ;
 - la liste des id ;
-- le détail des commandes avant mise à jour (id, statut, client_id, date, prix, produit_id) ;
+- le détail des commandes avant mise à jour (id, statut, client_id, date, prix, produit_id, pays) ;
 - la requête `UPDATE` exécutée ;
 - les lignes mises à jour, avec le même détail.
 
-Si aucune commande `ABONDONNE` n'est trouvée, le bloc contient seulement l'en-tête et `Aucune commande ABONDONNE.`.
+Si aucune commande `ABONDONNE` française n'est trouvée, le bloc contient seulement l'en-tête et `Aucune commande ABONDONNE pour la France.`.
 
 ```bash
 ls logs/

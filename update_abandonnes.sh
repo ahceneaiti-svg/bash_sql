@@ -36,10 +36,10 @@ if [ -n "$purges" ]; then
 fi
 
 # 1. Sélection des commandes abandonnées
-rows=$(run_sql "SELECT id, statut FROM commande WHERE statut = 'ABONDONNE';")
+rows=$(run_sql "SELECT c.id, c.statut, cl.pays FROM commande c LEFT JOIN client cl ON cl.id = c.client_id WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';")
 
 if [ -z "$rows" ]; then
-    log "Aucune commande ABONDONNE."
+    log "Aucune commande ABONDONNE pour la France."
     log ""
     exit 0
 fi
@@ -47,12 +47,12 @@ fi
 # 2. Construction de la liste d'id : 4,7,9,...
 ids=$(echo "$rows" | awk '{print $1}' | paste -sd, -)
 
-log "--- Commandes détectées (id, statut) ---"
+log "--- Commandes détectées (id, statut, pays) ---"
 log "$rows"
 log "--- Liste des id ---"
 log "$ids"
-log "--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id) ---"
-log "$(run_sql "SELECT id, statut, client_id, date, prix, produit_id FROM commande WHERE id IN ($ids);")"
+log "--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id, pays) ---"
+log "$(run_sql "SELECT c.id, c.statut, c.client_id, c.date, c.prix, c.produit_id, cl.pays FROM commande c LEFT JOIN client cl ON cl.id = c.client_id WHERE c.id IN ($ids);")"
 
 # 3. Mise à jour
 log "--- Requête exécutée ---"
@@ -60,6 +60,6 @@ log "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
 run_sql "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
 
 # 4. Lignes mises à jour
-log "--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id) ---"
-log "$(run_sql "SELECT id, statut, client_id, date, prix, produit_id FROM commande WHERE id IN ($ids);")"
+log "--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id, pays) ---"
+log "$(run_sql "SELECT c.id, c.statut, c.client_id, c.date, c.prix, c.produit_id, cl.pays FROM commande c LEFT JOIN client cl ON cl.id = c.client_id WHERE c.id IN ($ids);")"
 log ""
