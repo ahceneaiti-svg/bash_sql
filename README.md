@@ -9,6 +9,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
 | `sql/commandes_abandonnees_france.sql` | Requête de détection (commandes `ABONDONNE` des clients français), lue par le script |
+| `sql/maj_statut_ok.sql` | Requête `UPDATE` (statut `OK`), le marqueur `{{IDS}}` est remplacé par la liste d'id détectée |
 | `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
 | `update_abandonnes.sh` | Détecte les `ABONDONNE` des clients français, les passe à `OK`, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
@@ -121,7 +122,7 @@ Le script :
    WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';
    ```
 3. construit la liste d'id (ex. `4,9,15`) ;
-4. exécute `UPDATE commande SET statut = 'OK' WHERE id IN (...)` ;
+4. exécute le `UPDATE commande SET statut = 'OK' WHERE id IN (...)` du fichier `sql/maj_statut_ok.sql`, en remplaçant `{{IDS}}` par la liste d'id ;
 5. relit les lignes modifiées ;
 6. écrit tout le détail dans le fichier de log du jour (voir section 5).
 

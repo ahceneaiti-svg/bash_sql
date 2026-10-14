@@ -60,9 +60,11 @@ log "--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_
 log "$(run_sql "SELECT c.id, c.statut, c.client_id, c.date, c.prix, c.produit_id, cl.pays FROM commande c LEFT JOIN client cl ON cl.id = c.client_id WHERE c.id IN ($ids);")"
 
 # 3. Mise à jour
+# {{IDS}} du fichier .sql est remplacé par la liste d'id (valeurs numériques issues de la base)
+update_sql=$(sed "s/{{IDS}}/$ids/g" "$SQL_DIR/maj_statut_ok.sql")
 log "--- Requête exécutée ---"
-log "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
-run_sql "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
+log "$(echo "$update_sql" | grep -v '^--')"
+run_sql "$update_sql"
 
 # 4. Lignes mises à jour
 log "--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id, pays) ---"
