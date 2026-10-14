@@ -10,6 +10,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
 | `sql/commandes_abandonnees_france.sql` | Requête de détection (commandes `ABONDONNE` des clients français), lue par le script |
 | `sql/maj_statut_ok.sql` | Requête `UPDATE` (statut `OK`), le marqueur `{{IDS}}` est remplacé par la liste d'id détectée |
+| `sql/detail_commandes.sql` | Requête de détail (avec le pays) des commandes de la liste d'id, utilisée avant et après la mise à jour pour les logs |
 | `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
 | `update_abandonnes.sh` | Détecte les `ABONDONNE` des clients français, les passe à `OK`, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
@@ -112,41 +113,64 @@ docker compose exec mysql mysql -uroot -proot ecommerce \
 docker compose exec mysql update_abandonnes.sh
 ```
 
-Le script :
+Le script est **générique** : il ne contient aucune requête métier. Il se connecte à la base, exécute un fichier `SELECT`, construit la liste d'id à partir de la 1re colonne du résultat, exécute un fichier `UPDATE` sur cette liste et journalise le tout.
+
+```
+update_abandonnes.sh [select.sql [update.sql [detail.sql]]]
+```
+
+| Argument | Rôle | Défaut |
+|---|---|---|
+| `select.sql` | requête de détection, la 1re colonne doit être l'`id` | `commandes_abandonnees_france.sql` |
+| `update.sql` | requête de mise à jour, `{{IDS}}` est remplacé par la liste d'id | `maj_statut_ok.sql` |
+| `detail.sql` | (optionnel) requête de détail, même marqueur, loggée avant et après l'update | `detail_commandes.sql` |
+
+Un nom sans `/` est cherché dans `/usr/local/share/sql` (dossier `sql/` du projet, copié dans l'image). Un chemin complet est utilisé tel quel. Les trois fichiers peuvent aussi être donnés par les variables `SELECT_SQL`, `UPDATE_SQL`, `DETAIL_SQL` ; `DETAIL_SQL=` (vide) désactive le détail.
+
+Sans argument, le script traite les commandes `ABONDONNE` des clients français :
 
 1. attend que MySQL accepte les connexions ;
-2. exécute la requête du fichier `sql/commandes_abandonnees_france.sql` (seules les commandes de clients français sont retenues, les italiennes restent `ABONDONNE`) :
+2. exécute `sql/commandes_abandonnees_france.sql` (les commandes italiennes restent `ABONDONNE`) :
    ```sql
    SELECT c.id, c.statut, cl.pays
    FROM commande c LEFT JOIN client cl ON cl.id = c.client_id
    WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';
    ```
 3. construit la liste d'id (ex. `4,9,15`) ;
-4. exécute le `UPDATE commande SET statut = 'OK' WHERE id IN (...)` du fichier `sql/maj_statut_ok.sql`, en remplaçant `{{IDS}}` par la liste d'id ;
-5. relit les lignes modifiées ;
+4. exécute `sql/maj_statut_ok.sql` (`UPDATE commande SET statut = 'OK' WHERE id IN (...)`) ;
+5. relit les lignes modifiées avec `sql/detail_commandes.sql` ;
 6. écrit tout le détail dans le fichier de log du jour (voir section 5).
+
+Exemple avec d'autres requêtes (`LOG_PREFIX` change le nom du fichier de log) :
+
+```bash
+docker compose exec -e LOG_PREFIX=italie mysql update_abandonnes.sh /chemin/select.sql /chemin/update.sql
+```
 
 Sortie attendue (identique au contenu ajouté au log) :
 
 ```
 === Lancement à 19:50 (2026-10-14) ===
---- Commandes détectées (id, statut, pays) ---
+Requêtes : select=commandes_abandonnees_france.sql update=maj_statut_ok.sql detail=detail_commandes.sql
+--- Lignes détectées ---
 4	ABONDONNE	France
 9	ABONDONNE	France
 15	ABONDONNE	France
 --- Liste des id ---
 4,9,15
---- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id, pays) ---
+--- Détail avant mise à jour ---
 4	ABONDONNE	4	2026-02-10	89.99	104	France
 ...
 --- Requête exécutée ---
-UPDATE commande SET statut = 'OK' WHERE id IN (4,9,15);
---- Lignes mises à jour (id, statut, client_id, date, prix, produit_id, pays) ---
+UPDATE commande
+SET statut = 'OK'
+WHERE id IN (4,9,15);
+--- Détail après mise à jour ---
 4	OK	4	2026-02-10	89.99	104	France
 ...
 ```
 
-S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucune commande ABONDONNE pour la France.` et ne modifie rien.
+S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucune ligne détectée.` et ne modifie rien.
 
 ### Variables d'environnement (optionnelles)
 
@@ -157,21 +181,24 @@ S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucun
 | `MYSQL_ROOT_PASSWORD` | `root` |
 | `DB_NAME` | `ecommerce` |
 | `LOG_DIR` | `/logs` |
+| `LOG_PREFIX` | `maj_commandes` |
+| `SQL_DIR` | `/usr/local/share/sql` |
+| `SELECT_SQL` / `UPDATE_SQL` / `DETAIL_SQL` | voir tableau des arguments |
 | `RETENTION_JOURS` | `7` |
 
 ## 5. Logs
 
-Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `maj_commandes_<AAAA-MM-JJ>.log`.
+Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `<LOG_PREFIX>_<AAAA-MM-JJ>.log` (`maj_commandes_<AAAA-MM-JJ>.log` par défaut).
 
 Chaque lancement du script **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
 
-- les commandes détectées (id, statut, pays) ;
+- les lignes détectées par le `SELECT` ;
 - la liste des id ;
-- le détail des commandes avant mise à jour (id, statut, client_id, date, prix, produit_id, pays) ;
+- le détail avant mise à jour (requête de détail) ;
 - la requête `UPDATE` exécutée ;
 - les lignes mises à jour, avec le même détail.
 
-Si aucune commande `ABONDONNE` française n'est trouvée, le bloc contient seulement l'en-tête et `Aucune commande ABONDONNE pour la France.`.
+Si aucune commande `ABONDONNE` française n'est trouvée, le bloc contient seulement l'en-tête et `Aucune ligne détectée.`.
 
 ```bash
 ls logs/
@@ -180,7 +207,7 @@ cat logs/maj_commandes_*.log
 
 ### Rétention et nettoyage
 
-À chaque lancement, avant le traitement, le script supprime les fichiers `maj_commandes_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
+À chaque lancement, avant le traitement, le script supprime les fichiers `<LOG_PREFIX>_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
 
 Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql update_abandonnes.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
 
