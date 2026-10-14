@@ -8,6 +8,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `
 |---|---|
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
+| `sql/commandes_abandonnees_france.sql` | Requête de détection (commandes `ABONDONNE` des clients français), lue par le script |
 | `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
 | `update_abandonnes.sh` | Détecte les `ABONDONNE` des clients français, les passe à `OK`, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
@@ -113,7 +114,7 @@ docker compose exec mysql update_abandonnes.sh
 Le script :
 
 1. attend que MySQL accepte les connexions ;
-2. exécute la requête suivante (seules les commandes de clients français sont retenues, les italiennes restent `ABONDONNE`) :
+2. exécute la requête du fichier `sql/commandes_abandonnees_france.sql` (seules les commandes de clients français sont retenues, les italiennes restent `ABONDONNE`) :
    ```sql
    SELECT c.id, c.statut, cl.pays
    FROM commande c LEFT JOIN client cl ON cl.id = c.client_id

@@ -7,6 +7,7 @@ DB_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
 DB_NAME="${DB_NAME:-ecommerce}"
 LOG_DIR="${LOG_DIR:-/logs}"
 RETENTION_JOURS="${RETENTION_JOURS:-7}"
+SQL_DIR="${SQL_DIR:-/usr/local/share/sql}"
 
 mkdir -p "$LOG_DIR"
 # Un fichier par jour ; chaque lancement y ajoute un bloc horodaté (heure:minute)
@@ -15,6 +16,10 @@ HEURE=$(date '+%H:%M')
 
 run_sql() {
     mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1" 2>/dev/null
+}
+
+run_sql_file() {
+    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B < "$1" 2>/dev/null
 }
 
 log() { echo "$*" | tee -a "$LOG_FILE"; }
@@ -36,7 +41,7 @@ if [ -n "$purges" ]; then
 fi
 
 # 1. Sélection des commandes abandonnées
-rows=$(run_sql "SELECT c.id, c.statut, cl.pays FROM commande c LEFT JOIN client cl ON cl.id = c.client_id WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';")
+rows=$(run_sql_file "$SQL_DIR/commandes_abandonnees_france.sql")
 
 if [ -z "$rows" ]; then
     log "Aucune commande ABONDONNE pour la France."
