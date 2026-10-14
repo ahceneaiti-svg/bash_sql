@@ -8,13 +8,15 @@ DB_NAME="${DB_NAME:-ecommerce}"
 LOG_DIR="${LOG_DIR:-/logs}"
 
 mkdir -p "$LOG_DIR"
-STAMP=$(date '+%Y%m%d_%H%M%S')
-LOG_DETECTEES="$LOG_DIR/detectees_${STAMP}.log"
-LOG_MAJ="$LOG_DIR/mises_a_jour_${STAMP}.log"
+# Un fichier par jour ; chaque lancement y ajoute un bloc horodaté (heure:minute)
+LOG_FILE="$LOG_DIR/maj_commandes_$(date '+%Y-%m-%d').log"
+HEURE=$(date '+%H:%M')
 
 run_sql() {
-    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1"
+    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1" 2>/dev/null
 }
+
+log() { echo "$*" | tee -a "$LOG_FILE"; }
 
 # Attente que MySQL accepte les connexions
 for _ in $(seq 1 30); do
@@ -22,29 +24,33 @@ for _ in $(seq 1 30); do
     sleep 2
 done
 
+log "=== Lancement à ${HEURE} ($(date '+%F')) ==="
+
 # 1. Sélection des commandes abandonnées
 rows=$(run_sql "SELECT id, statut FROM commande WHERE statut = 'ABONDONNE';")
 
 if [ -z "$rows" ]; then
-    echo "Aucune commande ABONDONNE."
+    log "Aucune commande ABONDONNE."
+    log ""
     exit 0
 fi
 
-# Log 1 : liste détectée
-{
-    echo "# $(date '+%F %T') - commandes détectées (id, statut)"
-    echo "$rows"
-} | tee "$LOG_DETECTEES"
-
 # 2. Construction de la liste d'id : 4,7,9,...
 ids=$(echo "$rows" | awk '{print $1}' | paste -sd, -)
-echo "Liste des id : $ids"
+
+log "--- Commandes détectées (id, statut) ---"
+log "$rows"
+log "--- Liste des id ---"
+log "$ids"
+log "--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id) ---"
+log "$(run_sql "SELECT id, statut, client_id, date, prix, produit_id FROM commande WHERE id IN ($ids);")"
 
 # 3. Mise à jour
+log "--- Requête exécutée ---"
+log "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
 run_sql "UPDATE commande SET statut = 'OK' WHERE id IN ($ids);"
 
-# Log 2 : commandes à jour
-{
-    echo "# $(date '+%F %T') - commandes mises à jour (id, statut)"
-    run_sql "SELECT id, statut FROM commande WHERE id IN ($ids);"
-} | tee "$LOG_MAJ"
+# 4. Lignes mises à jour
+log "--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id) ---"
+log "$(run_sql "SELECT id, statut, client_id, date, prix, produit_id FROM commande WHERE id IN ($ids);")"
+log ""

@@ -100,19 +100,26 @@ Le script :
 2. exécute `SELECT id, statut FROM commande WHERE statut = 'ABONDONNE'` ;
 3. construit la liste d'id (ex. `4,7,9,12,15`) ;
 4. exécute `UPDATE commande SET statut = 'OK' WHERE id IN (...)` ;
-5. relit les commandes modifiées.
+5. relit les lignes modifiées ;
+6. écrit tout le détail dans le fichier de log du jour (voir section 5).
 
-Sortie attendue :
+Sortie attendue (identique au contenu ajouté au log) :
 
 ```
-# 2026-10-14 19:37:37 - commandes détectées (id, statut)
+=== Lancement à 19:50 (2026-10-14) ===
+--- Commandes détectées (id, statut) ---
 4	ABONDONNE
 7	ABONDONNE
 ...
-Liste des id : 4,7,9,12,15
-# 2026-10-14 19:37:37 - commandes mises à jour (id, statut)
-4	OK
-7	OK
+--- Liste des id ---
+4,7,9,12,15
+--- Détail avant mise à jour (id, statut, client_id, date, prix, produit_id) ---
+4	ABONDONNE	4	2026-02-10	89.99	104
+...
+--- Requête exécutée ---
+UPDATE commande SET statut = 'OK' WHERE id IN (4,7,9,12,15);
+--- Lignes mises à jour (id, statut, client_id, date, prix, produit_id) ---
+4	OK	4	2026-02-10	89.99	104
 ...
 ```
 
@@ -130,14 +137,27 @@ S'il n'y a plus de commande `ABONDONNE`, le script affiche `Aucune commande ABON
 
 ## 5. Logs
 
-Chaque exécution crée deux fichiers horodatés dans `./logs/` (dossier monté sur `/logs` dans le conteneur) :
+Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `maj_commandes_<AAAA-MM-JJ>.log`.
 
-- `detectees_<AAAAMMJJ_HHMMSS>.log` : liste des commandes détectées (id, statut) ;
-- `mises_a_jour_<AAAAMMJJ_HHMMSS>.log` : ces commandes après l'update, avec leur nouveau statut.
+Chaque lancement du script **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
+
+- les commandes détectées (id, statut) ;
+- la liste des id ;
+- le détail des commandes avant mise à jour (id, statut, client_id, date, prix, produit_id) ;
+- la requête `UPDATE` exécutée ;
+- les lignes mises à jour, avec le même détail.
+
+Si aucune commande `ABONDONNE` n'est trouvée, le bloc contient seulement l'en-tête et `Aucune commande ABONDONNE.`.
 
 ```bash
 ls logs/
-cat logs/detectees_*.log
+cat logs/maj_commandes_*.log
+```
+
+Les fichiers de `logs/` sont créés par le conteneur (propriétaire root) et ignorés par git. Pour les supprimer :
+
+```bash
+docker compose exec mysql sh -c 'rm -f /logs/*.log'
 ```
 
 ## Notes
