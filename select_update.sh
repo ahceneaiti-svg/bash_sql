@@ -15,7 +15,6 @@ DB_USER="${DB_USER:-root}"
 DB_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
 DB_NAME="${DB_NAME:-ecommerce}"
 LOG_DIR="${LOG_DIR:-/logs}"
-LOG_PREFIX="${LOG_PREFIX:-maj_commandes}"
 RETENTION_JOURS="${RETENTION_JOURS:-7}"
 SQL_DIR="${SQL_DIR:-/usr/local/share/sql}"
 
@@ -24,8 +23,8 @@ UPDATE_SQL="${2:-${UPDATE_SQL:-maj_statut_ok.sql}}"
 DETAIL_SQL="${3:-${DETAIL_SQL-detail_commandes.sql}}"
 
 mkdir -p "$LOG_DIR"
-# Un fichier par jour ; chaque lancement y ajoute un bloc horodaté (heure:minute)
-LOG_FILE="$LOG_DIR/${LOG_PREFIX}_$(date '+%Y-%m-%d').log"
+# Un seul fichier de log par jour pour tous les jobs ; chaque lancement y ajoute un bloc horodaté (heure:minute)
+LOG_FILE="$LOG_DIR/maj_commandes_$(date '+%Y-%m-%d').log"
 HEURE=$(date '+%H:%M')
 ids=""
 
@@ -58,10 +57,10 @@ for _ in $(seq 1 30); do
 done
 
 log "=== Lancement à ${HEURE} ($(date '+%F')) ==="
-log "Requêtes : select=${SELECT_SQL} update=${UPDATE_SQL} detail=${DETAIL_SQL:-aucun}"
+log "Fichiers SQL : select=${SELECT_SQL} | update=${UPDATE_SQL} | detail=${DETAIL_SQL:-aucun}"
 
 # Rétention : suppression des logs plus vieux que RETENTION_JOURS jours
-purges=$(find "$LOG_DIR" -maxdepth 1 -type f -name "${LOG_PREFIX}_*.log" \
+purges=$(find "$LOG_DIR" -maxdepth 1 -type f -name 'maj_commandes_*.log' \
     -mmin +$((RETENTION_JOURS * 1440)) -print -delete)
 if [ -n "$purges" ]; then
     log "--- Logs supprimés (rétention ${RETENTION_JOURS} jours) ---"
@@ -72,7 +71,7 @@ fi
 rows=$(run_sql_file "$SELECT_SQL")
 
 if [ -z "$rows" ]; then
-    log "Aucune ligne détectée."
+    log "Aucune ligne détectée par ${SELECT_SQL}."
     log ""
     exit 0
 fi
@@ -80,24 +79,24 @@ fi
 # 2. Construction de la liste d'id : 4,7,9,... (1re colonne)
 ids=$(echo "$rows" | awk '{print $1}' | paste -sd, -)
 
-log "--- Lignes détectées ---"
+log "--- Lignes détectées (${SELECT_SQL}) ---"
 log "$rows"
 log "--- Liste des id ---"
 log "$ids"
 if [ -n "$DETAIL_SQL" ]; then
-    log "--- Détail avant mise à jour ---"
+    log "--- Détail avant mise à jour (${DETAIL_SQL}) ---"
     log "$(run_sql "$(render_sql "$DETAIL_SQL")")"
 fi
 
 # 3. Mise à jour
 update_sql=$(render_sql "$UPDATE_SQL")
-log "--- Requête exécutée ---"
+log "--- Requête exécutée (${UPDATE_SQL}) ---"
 log "$(echo "$update_sql" | grep -v '^--')"
 run_sql "$update_sql"
 
 # 4. Lignes mises à jour
 if [ -n "$DETAIL_SQL" ]; then
-    log "--- Détail après mise à jour ---"
+    log "--- Détail après mise à jour (${DETAIL_SQL}) ---"
     log "$(run_sql "$(render_sql "$DETAIL_SQL")")"
 fi
 log ""

@@ -180,31 +180,31 @@ docker compose exec mysql select_update.sh produits_stock_faible.sql maj_reappro
 
 Pour ajouter un job : créer les fichiers dans `sql/`, rebuild (`docker compose up -d --build`) et les passer en arguments.
 
-Exemple avec d'autres requêtes (`LOG_PREFIX` change le nom du fichier de log) :
+Exemple avec d'autres requêtes :
 
 ```bash
-docker compose exec -e LOG_PREFIX=italie mysql select_update.sh /chemin/select.sql /chemin/update.sql
+docker compose exec mysql select_update.sh /chemin/select.sql /chemin/update.sql
 ```
 
 Sortie attendue (identique au contenu ajouté au log) :
 
 ```
 === Lancement à 19:50 (2026-10-14) ===
-Requêtes : select=commandes_abandonnees_france.sql update=maj_statut_ok.sql detail=detail_commandes.sql
---- Lignes détectées ---
+Fichiers SQL : select=commandes_abandonnees_france.sql | update=maj_statut_ok.sql | detail=detail_commandes.sql
+--- Lignes détectées (commandes_abandonnees_france.sql) ---
 4	ABONDONNE	France
 9	ABONDONNE	France
 15	ABONDONNE	France
 --- Liste des id ---
 4,9,15
---- Détail avant mise à jour ---
+--- Détail avant mise à jour (detail_commandes.sql) ---
 4	ABONDONNE	4	2026-02-10	89.99	104	France
 ...
---- Requête exécutée ---
+--- Requête exécutée (maj_statut_ok.sql) ---
 UPDATE commande
 SET statut = 'OK'
 WHERE id IN (4,9,15);
---- Détail après mise à jour ---
+--- Détail après mise à jour (detail_commandes.sql) ---
 4	OK	4	2026-02-10	89.99	104	France
 ...
 ```
@@ -220,14 +220,13 @@ S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucun
 | `MYSQL_ROOT_PASSWORD` | `root` |
 | `DB_NAME` | `ecommerce` |
 | `LOG_DIR` | `/logs` |
-| `LOG_PREFIX` | `maj_commandes` |
 | `SQL_DIR` | `/usr/local/share/sql` |
 | `SELECT_SQL` / `UPDATE_SQL` / `DETAIL_SQL` | voir tableau des arguments |
 | `RETENTION_JOURS` | `7` |
 
 ## 5. Logs
 
-Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `<LOG_PREFIX>_<AAAA-MM-JJ>.log` (`maj_commandes_<AAAA-MM-JJ>.log` par défaut).
+Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `maj_commandes_<AAAA-MM-JJ>.log`, commun à tous les jobs.
 
 Chaque lancement du script **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
 
@@ -246,7 +245,7 @@ cat logs/maj_commandes_*.log
 
 ### Rétention et nettoyage
 
-À chaque lancement, avant le traitement, le script supprime les fichiers `<LOG_PREFIX>_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
+À chaque lancement, avant le traitement, le script supprime les fichiers `maj_commandes_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
 
 Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql select_update.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
 
