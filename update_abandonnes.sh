@@ -6,6 +6,7 @@ DB_USER="${DB_USER:-root}"
 DB_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
 DB_NAME="${DB_NAME:-ecommerce}"
 LOG_DIR="${LOG_DIR:-/logs}"
+RETENTION_JOURS="${RETENTION_JOURS:-7}"
 
 mkdir -p "$LOG_DIR"
 # Un fichier par jour ; chaque lancement y ajoute un bloc horodaté (heure:minute)
@@ -25,6 +26,14 @@ for _ in $(seq 1 30); do
 done
 
 log "=== Lancement à ${HEURE} ($(date '+%F')) ==="
+
+# Rétention : suppression des logs plus vieux que RETENTION_JOURS jours
+purges=$(find "$LOG_DIR" -maxdepth 1 -type f -name 'maj_commandes_*.log' \
+    -mmin +$((RETENTION_JOURS * 1440)) -print -delete)
+if [ -n "$purges" ]; then
+    log "--- Logs supprimés (rétention ${RETENTION_JOURS} jours) ---"
+    log "$purges"
+fi
 
 # 1. Sélection des commandes abandonnées
 rows=$(run_sql "SELECT id, statut FROM commande WHERE statut = 'ABONDONNE';")

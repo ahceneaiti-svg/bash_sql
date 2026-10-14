@@ -134,6 +134,7 @@ S'il n'y a plus de commande `ABONDONNE`, le script affiche `Aucune commande ABON
 | `MYSQL_ROOT_PASSWORD` | `root` |
 | `DB_NAME` | `ecommerce` |
 | `LOG_DIR` | `/logs` |
+| `RETENTION_JOURS` | `7` |
 
 ## 5. Logs
 
@@ -153,6 +154,12 @@ Si aucune commande `ABONDONNE` n'est trouvée, le bloc contient seulement l'en-t
 ls logs/
 cat logs/maj_commandes_*.log
 ```
+
+### Rétention et nettoyage
+
+À chaque lancement, avant le traitement, le script supprime les fichiers `maj_commandes_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
+
+Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql update_abandonnes.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
 
 Les fichiers de `logs/` sont créés par le conteneur (propriétaire root) et ignorés par git. Pour les supprimer :
 
