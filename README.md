@@ -1,6 +1,6 @@
 # MySQL e-commerce : conteneur, données et script de mise à jour
 
-Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `commande`) pré-remplies, et un script bash qui passe au statut `OK` les commandes `ABONDONNE` des clients de France.
+Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `produit`, `commande`, `livraison`) pré-remplies, et un script bash qui passe au statut `OK` les commandes `ABONDONNE` des clients de France.
 
 ## Contenu
 
@@ -8,10 +8,8 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `
 |---|---|
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
-| `sql/commandes_abandonnees_france.sql` | Requête de détection (commandes `ABONDONNE` des clients français), lue par le script |
-| `sql/maj_statut_ok.sql` | Requête `UPDATE` (statut `OK`), le marqueur `{{IDS}}` est remplacé par la liste d'id détectée |
-| `sql/detail_commandes.sql` | Requête de détail (avec le pays) des commandes de la liste d'id, utilisée avant et après la mise à jour pour les logs |
-| `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
+| `sql/*.sql` | Requêtes SELECT / détail / UPDATE lues par le script (voir section 4, « Jobs fournis ») |
+| `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique : exécute un SELECT, puis un UPDATE sur la liste d'id obtenue, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
 
@@ -40,7 +38,7 @@ docker compose down
 
 ## 2. Générer les données
 
-Le jeu de données est créé automatiquement par `init.sql` **au premier démarrage** (base vide) : 10 clients et 15 commandes.
+Le jeu de données est créé automatiquement par `init.sql` **au premier démarrage** (base vide) : 10 clients, 10 produits, 15 commandes et 10 livraisons.
 
 Clients : 6 en `France`, 4 en `Italie`.
 
@@ -52,6 +50,10 @@ Commandes (statut / pays du client) :
 | `EN_COURS` | 1 | 3 | 4 |
 | `ABONDONNE` | 3 | 2 | 5 |
 
+Produits : 10 références (id 101 à 110), dont 3 en stock faible (< 10) : 103, 106, 109.
+
+Livraisons (une par commande en cours ou terminée) : 6 `LIVRE` et 4 `EN_ATTENTE` (3 pour des clients italiens, 1 pour un client français).
+
 Table `client` :
 
 | Colonne | Type |
@@ -62,6 +64,16 @@ Table `client` :
 | `pays` | VARCHAR(30) : `France` ou `Italie` |
 | `adresse` | VARCHAR(150) |
 
+Table `produit` :
+
+| Colonne | Type |
+|---|---|
+| `id` | INT, clé primaire (101 à 110) |
+| `nom` | VARCHAR(80) |
+| `categorie` | VARCHAR(40) |
+| `prix` | DECIMAL(10,2) |
+| `stock` | INT |
+
 Table `commande` :
 
 | Colonne | Type |
@@ -71,7 +83,17 @@ Table `commande` :
 | `client_id` | INT, clé étrangère vers `client.id` |
 | `date` | DATE |
 | `prix` | DECIMAL(10,2) |
-| `produit_id` | INT |
+| `produit_id` | INT, clé étrangère vers `produit.id` |
+
+Table `livraison` :
+
+| Colonne | Type |
+|---|---|
+| `id` | INT, auto-incrément, clé primaire |
+| `commande_id` | INT, clé étrangère vers `commande.id` |
+| `transporteur` | VARCHAR(40) |
+| `statut` | VARCHAR(20) : `LIVRE`, `EN_ATTENTE` (puis `EXPEDIE` après le job livraisons) |
+| `date_expedition` | DATE, nullable |
 
 ### Régénérer les données depuis zéro
 
@@ -140,6 +162,23 @@ Sans argument, le script traite les commandes `ABONDONNE` des clients français 
 4. exécute `sql/maj_statut_ok.sql` (`UPDATE commande SET statut = 'OK' WHERE id IN (...)`) ;
 5. relit les lignes modifiées avec `sql/detail_commandes.sql` ;
 6. écrit tout le détail dans le fichier de log du jour (voir section 5).
+
+### Jobs fournis (dossier `sql/`)
+
+Chaque job = un `SELECT` (1re colonne = id), un `UPDATE` avec `{{IDS}}` et un détail optionnel.
+
+| Job | select | update | detail |
+|---|---|---|---|
+| Commandes abandonnées de France → `OK` (défaut, cron) | `commandes_abandonnees_france.sql` | `maj_statut_ok.sql` | `detail_commandes.sql` |
+| Livraisons en attente d'Italie → `EXPEDIE` (date du jour) | `livraisons_en_attente_italie.sql` | `maj_livraison_expediee.sql` | `detail_livraisons.sql` |
+| Produits en stock faible (< 10) → réappro +50 | `produits_stock_faible.sql` | `maj_reappro_stock.sql` | `detail_produits.sql` |
+
+```bash
+docker compose exec mysql select_update.sh livraisons_en_attente_italie.sql maj_livraison_expediee.sql detail_livraisons.sql
+docker compose exec mysql select_update.sh produits_stock_faible.sql maj_reappro_stock.sql detail_produits.sql
+```
+
+Pour ajouter un job : créer les fichiers dans `sql/`, rebuild (`docker compose up -d --build`) et les passer en arguments.
 
 Exemple avec d'autres requêtes (`LOG_PREFIX` change le nom du fichier de log) :
 

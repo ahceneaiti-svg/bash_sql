@@ -21,6 +21,26 @@ INSERT INTO client (nom, prenom, pays, adresse) VALUES
 ('Garnier',  'Emma',     'France', '5 quai des Chartrons, 33000 Bordeaux'),
 ('Romano',   'Francesca','Italie', 'Via Garibaldi 22, 10122 Torino');
 
+CREATE TABLE produit (
+    id        INT PRIMARY KEY,
+    nom       VARCHAR(80)   NOT NULL,
+    categorie VARCHAR(40)   NOT NULL,
+    prix      DECIMAL(10,2) NOT NULL,
+    stock     INT           NOT NULL
+);
+
+INSERT INTO produit (id, nom, categorie, prix, stock) VALUES
+(101, 'Clavier mécanique',    'Informatique',  19.90,  42),
+(102, 'Écran 27 pouces',      'Informatique', 120.00,  15),
+(103, 'Souris sans fil',      'Informatique',  15.50,   4),
+(104, 'Casque audio',         'Audio',         89.99,  25),
+(105, 'Enceinte Bluetooth',   'Audio',         55.00,  30),
+(106, 'Ordinateur portable',  'Informatique', 250.00,   2),
+(107, 'Webcam HD',            'Informatique',  75.25,  18),
+(108, 'Tablette graphique',   'Informatique', 310.00,  11),
+(109, 'Câble HDMI',           'Accessoires',   42.00,   7),
+(110, 'Support ordinateur',   'Accessoires',   12.99,  60);
+
 CREATE TABLE commande (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     statut     VARCHAR(20)   NOT NULL,
@@ -28,7 +48,8 @@ CREATE TABLE commande (
     date       DATE          NOT NULL,
     prix       DECIMAL(10,2) NOT NULL,
     produit_id INT           NOT NULL,
-    CONSTRAINT fk_commande_client FOREIGN KEY (client_id) REFERENCES client (id)
+    CONSTRAINT fk_commande_client FOREIGN KEY (client_id) REFERENCES client (id),
+    CONSTRAINT fk_commande_produit FOREIGN KEY (produit_id) REFERENCES produit (id)
 );
 
 INSERT INTO commande (statut, client_id, date, prix, produit_id) VALUES
@@ -47,3 +68,24 @@ INSERT INTO commande (statut, client_id, date, prix, produit_id) VALUES
 ('EN_COURS', 10, '2026-04-20', 199.99, 103),
 ('TERMINE',   4, '2026-05-01',  27.80, 104),
 ('ABONDONNE', 5, '2026-05-06',  55.00, 105);
+
+CREATE TABLE livraison (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    commande_id     INT         NOT NULL,
+    transporteur    VARCHAR(40) NOT NULL,
+    statut          VARCHAR(20) NOT NULL,
+    date_expedition DATE        NULL,
+    CONSTRAINT fk_livraison_commande FOREIGN KEY (commande_id) REFERENCES commande (id)
+);
+
+INSERT INTO livraison (commande_id, transporteur, statut, date_expedition) VALUES
+(1,  'Colissimo',      'LIVRE',      '2026-01-06'),
+(2,  'Chronopost',     'LIVRE',      '2026-01-13'),
+(3,  'Poste Italiane', 'EN_ATTENTE', NULL),
+(5,  'Colissimo',      'LIVRE',      '2026-02-19'),
+(6,  'Chronopost',     'EN_ATTENTE', NULL),
+(8,  'BRT',            'LIVRE',      '2026-03-16'),
+(10, 'BRT',            'EN_ATTENTE', NULL),
+(11, 'Colissimo',      'LIVRE',      '2026-04-10'),
+(13, 'Poste Italiane', 'EN_ATTENTE', NULL),
+(14, 'DHL',            'LIVRE',      '2026-05-02');
