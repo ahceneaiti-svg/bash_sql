@@ -3,7 +3,7 @@
 # la liste d'id (1re colonne du résultat), exécute une requête UPDATE sur cette liste
 # et journalise le tout. Toute la logique métier est dans les fichiers .sql.
 #
-# Usage : update_abandonnes.sh [select.sql [update.sql [detail.sql]]]
+# Usage : select_update.sh [select.sql [update.sql [detail.sql]]]
 #   select.sql : requête de détection, 1re colonne = id
 #   update.sql : requête de mise à jour, le marqueur {{IDS}} est remplacé par la liste d'id
 #   detail.sql : (optionnel) requête de détail, même marqueur, loggée avant/après la mise à jour

@@ -12,7 +12,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, deux tables liées (`client` et `
 | `sql/maj_statut_ok.sql` | Requête `UPDATE` (statut `OK`), le marqueur `{{IDS}}` est remplacé par la liste d'id détectée |
 | `sql/detail_commandes.sql` | Requête de détail (avec le pays) des commandes de la liste d'id, utilisée avant et après la mise à jour pour les logs |
 | `init.sql` | Création de la base, des tables `client` et `commande` et du jeu de données |
-| `update_abandonnes.sh` | Détecte les `ABONDONNE` des clients français, les passe à `OK`, écrit les logs |
+| `select_update.sh` | Script générique : exécute un SELECT, puis un UPDATE sur la liste d'id obtenue, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
 
 ## Prérequis
@@ -110,13 +110,13 @@ docker compose exec mysql mysql -uroot -proot ecommerce \
 ## 4. Lancer le script bash
 
 ```bash
-docker compose exec mysql update_abandonnes.sh
+docker compose exec mysql select_update.sh
 ```
 
 Le script est **générique** : il ne contient aucune requête métier. Il se connecte à la base, exécute un fichier `SELECT`, construit la liste d'id à partir de la 1re colonne du résultat, exécute un fichier `UPDATE` sur cette liste et journalise le tout.
 
 ```
-update_abandonnes.sh [select.sql [update.sql [detail.sql]]]
+select_update.sh [select.sql [update.sql [detail.sql]]]
 ```
 
 | Argument | Rôle | Défaut |
@@ -144,7 +144,7 @@ Sans argument, le script traite les commandes `ABONDONNE` des clients français 
 Exemple avec d'autres requêtes (`LOG_PREFIX` change le nom du fichier de log) :
 
 ```bash
-docker compose exec -e LOG_PREFIX=italie mysql update_abandonnes.sh /chemin/select.sql /chemin/update.sql
+docker compose exec -e LOG_PREFIX=italie mysql select_update.sh /chemin/select.sql /chemin/update.sql
 ```
 
 Sortie attendue (identique au contenu ajouté au log) :
@@ -209,7 +209,7 @@ cat logs/maj_commandes_*.log
 
 À chaque lancement, avant le traitement, le script supprime les fichiers `<LOG_PREFIX>_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
 
-Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql update_abandonnes.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
+Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql select_update.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
 
 Les fichiers de `logs/` sont créés par le conteneur (propriétaire root) et ignorés par git. Pour les supprimer :
 
@@ -222,7 +222,7 @@ docker compose exec mysql sh -c 'rm -f /logs/*.log'
 Le fichier `crontab` lance le script toutes les heures pleines de 6h à 22h (6:00, 7:00, ... 22:00, soit 17 exécutions par jour) :
 
 ```
-0 6-22 * * * cd /home/aia/workspace/claude/bash_sql && /usr/bin/docker compose exec -T mysql update_abandonnes.sh >/dev/null 2>&1
+0 6-22 * * * cd /home/aia/workspace/claude/bash_sql && /usr/bin/docker compose exec -T mysql select_update.sh >/dev/null 2>&1
 ```
 
 Le cron s'exécute sur la machine hôte et appelle le script dans le conteneur, qui doit donc être démarré (`docker compose up -d`). Adapter le chemin du projet dans `crontab` si besoin.

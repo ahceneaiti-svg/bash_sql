@@ -1,3 +1,3 @@
-# Lance update_abandonnes.sh toutes les heures pleines de 6h à 22h (6:00, 7:00, ... 22:00)
+# Lance select_update.sh toutes les heures pleines de 6h à 22h (6:00, 7:00, ... 22:00)
 # Installation : crontab crontab   (voir README)
-0 6-22 * * * cd /home/aia/workspace/claude/bash_sql && /usr/bin/docker compose exec -T mysql update_abandonnes.sh >/dev/null 2>&1
+0 6-22 * * * cd /home/aia/workspace/claude/bash_sql && /usr/bin/docker compose exec -T mysql select_update.sh >/dev/null 2>&1
