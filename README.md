@@ -8,7 +8,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `
 |---|---|
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
-| `sql/*.sql` | Requêtes SELECT / détail / UPDATE lues par le script (voir section 4, « Jobs fournis ») |
+| `sql/<domaine>/*.sql` | Requêtes SELECT / détail / UPDATE lues par le script (voir section 4, « Jobs fournis ») |
 | `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique : exécute un SELECT, puis un UPDATE sur la liste d'id obtenue, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
@@ -143,24 +143,24 @@ select_update.sh [select.sql [update.sql [detail.sql]]]
 
 | Argument | Rôle | Défaut |
 |---|---|---|
-| `select.sql` | requête de détection, la 1re colonne doit être l'`id` | `commandes_abandonnees_france.sql` |
-| `update.sql` | requête de mise à jour, `{{IDS}}` est remplacé par la liste d'id | `maj_statut_ok.sql` |
-| `detail.sql` | (optionnel) requête de détail, même marqueur, loggée avant et après l'update | `detail_commandes.sql` |
+| `select.sql` | requête de détection, la 1re colonne doit être l'`id` | `commandes/commandes_abandonnees_france.sql` |
+| `update.sql` | requête de mise à jour, `{{IDS}}` est remplacé par la liste d'id | `commandes/maj_statut_ok.sql` |
+| `detail.sql` | (optionnel) requête de détail, même marqueur, loggée avant et après l'update | `commandes/detail_commandes.sql` |
 
-Un nom sans `/` est cherché dans `/usr/local/share/sql` (dossier `sql/` du projet, copié dans l'image). Un chemin complet est utilisé tel quel. Les trois fichiers peuvent aussi être donnés par les variables `SELECT_SQL`, `UPDATE_SQL`, `DETAIL_SQL` ; `DETAIL_SQL=` (vide) désactive le détail.
+Un chemin relatif (ex. `commandes/maj_statut_ok.sql`) est cherché dans `/usr/local/share/sql` (dossier `sql/` du projet, copié dans l'image). Un chemin absolu est utilisé tel quel. Les trois fichiers peuvent aussi être donnés par les variables `SELECT_SQL`, `UPDATE_SQL`, `DETAIL_SQL` ; `DETAIL_SQL=` (vide) désactive le détail.
 
 Sans argument, le script traite les commandes `ABONDONNE` des clients français :
 
 1. attend que MySQL accepte les connexions ;
-2. exécute `sql/commandes_abandonnees_france.sql` (les commandes italiennes restent `ABONDONNE`) :
+2. exécute `sql/commandes/commandes_abandonnees_france.sql` (les commandes italiennes restent `ABONDONNE`) :
    ```sql
    SELECT c.id, c.statut, cl.pays
    FROM commande c LEFT JOIN client cl ON cl.id = c.client_id
    WHERE c.statut = 'ABONDONNE' AND cl.pays = 'France';
    ```
 3. construit la liste d'id (ex. `4,9,15`) ;
-4. exécute `sql/maj_statut_ok.sql` (`UPDATE commande SET statut = 'OK' WHERE id IN (...)`) ;
-5. relit les lignes modifiées avec `sql/detail_commandes.sql` ;
+4. exécute `sql/commandes/maj_statut_ok.sql` (`UPDATE commande SET statut = 'OK' WHERE id IN (...)`) ;
+5. relit les lignes modifiées avec `sql/commandes/detail_commandes.sql` ;
 6. écrit tout le détail dans le fichier de log du jour (voir section 5).
 
 ### Jobs fournis (dossier `sql/`)
@@ -169,16 +169,16 @@ Chaque job = un `SELECT` (1re colonne = id), un `UPDATE` avec `{{IDS}}` et un d�
 
 | Job | select | update | detail |
 |---|---|---|---|
-| Commandes abandonnées de France → `OK` (défaut, cron) | `commandes_abandonnees_france.sql` | `maj_statut_ok.sql` | `detail_commandes.sql` |
-| Livraisons en attente d'Italie → `EXPEDIE` (date du jour) | `livraisons_en_attente_italie.sql` | `maj_livraison_expediee.sql` | `detail_livraisons.sql` |
-| Produits en stock faible (< 10) → réappro +50 | `produits_stock_faible.sql` | `maj_reappro_stock.sql` | `detail_produits.sql` |
+| Commandes abandonnées de France → `OK` (défaut, cron) | `commandes/commandes_abandonnees_france.sql` | `commandes/maj_statut_ok.sql` | `commandes/detail_commandes.sql` |
+| Livraisons en attente d'Italie → `EXPEDIE` (date du jour) | `livraisons/livraisons_en_attente_italie.sql` | `livraisons/maj_livraison_expediee.sql` | `livraisons/detail_livraisons.sql` |
+| Produits en stock faible (< 10) → réappro +50 | `produits/produits_stock_faible.sql` | `produits/maj_reappro_stock.sql` | `produits/detail_produits.sql` |
 
 ```bash
-docker compose exec mysql select_update.sh livraisons_en_attente_italie.sql maj_livraison_expediee.sql detail_livraisons.sql
-docker compose exec mysql select_update.sh produits_stock_faible.sql maj_reappro_stock.sql detail_produits.sql
+docker compose exec mysql select_update.sh livraisons/livraisons_en_attente_italie.sql livraisons/maj_livraison_expediee.sql livraisons/detail_livraisons.sql
+docker compose exec mysql select_update.sh produits/produits_stock_faible.sql produits/maj_reappro_stock.sql produits/detail_produits.sql
 ```
 
-Pour ajouter un job : créer les fichiers dans `sql/`, rebuild (`docker compose up -d --build`) et les passer en arguments.
+Pour ajouter un job : créer les fichiers dans `sql/<domaine>/`, rebuild (`docker compose up -d --build`) et les passer en arguments.
 
 Exemple avec d'autres requêtes :
 
@@ -190,21 +190,21 @@ Sortie attendue (identique au contenu ajouté au log) :
 
 ```
 === Lancement à 19:50 (2026-10-14) ===
-Fichiers SQL : select=commandes_abandonnees_france.sql | update=maj_statut_ok.sql | detail=detail_commandes.sql
---- Lignes détectées (commandes_abandonnees_france.sql) ---
+Fichiers SQL : select=commandes/commandes_abandonnees_france.sql | update=commandes/maj_statut_ok.sql | detail=commandes/detail_commandes.sql
+--- Lignes détectées (commandes/commandes_abandonnees_france.sql) ---
 4	ABONDONNE	France
 9	ABONDONNE	France
 15	ABONDONNE	France
 --- Liste des id ---
 4,9,15
---- Détail avant mise à jour (detail_commandes.sql) ---
+--- Détail avant mise à jour (commandes/detail_commandes.sql) ---
 4	ABONDONNE	4	2026-02-10	89.99	104	France
 ...
---- Requête exécutée (maj_statut_ok.sql) ---
+--- Requête exécutée (commandes/maj_statut_ok.sql) ---
 UPDATE commande
 SET statut = 'OK'
 WHERE id IN (4,9,15);
---- Détail après mise à jour (detail_commandes.sql) ---
+--- Détail après mise à jour (commandes/detail_commandes.sql) ---
 4	OK	4	2026-02-10	89.99	104	France
 ...
 ```

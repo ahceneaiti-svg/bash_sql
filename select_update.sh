@@ -7,7 +7,7 @@
 #   select.sql : requête de détection, 1re colonne = id
 #   update.sql : requête de mise à jour, le marqueur {{IDS}} est remplacé par la liste d'id
 #   detail.sql : (optionnel) requête de détail, même marqueur, loggée avant/après la mise à jour
-# Un nom sans "/" est cherché dans $SQL_DIR.
+# Un chemin relatif (ex. commandes/maj_statut_ok.sql) est cherché dans $SQL_DIR ; un chemin absolu est utilisé tel quel.
 set -euo pipefail
 
 DB_HOST="${DB_HOST:-localhost}"
@@ -18,9 +18,9 @@ LOG_DIR="${LOG_DIR:-/logs}"
 RETENTION_JOURS="${RETENTION_JOURS:-7}"
 SQL_DIR="${SQL_DIR:-/usr/local/share/sql}"
 
-SELECT_SQL="${1:-${SELECT_SQL:-commandes_abandonnees_france.sql}}"
-UPDATE_SQL="${2:-${UPDATE_SQL:-maj_statut_ok.sql}}"
-DETAIL_SQL="${3:-${DETAIL_SQL-detail_commandes.sql}}"
+SELECT_SQL="${1:-${SELECT_SQL:-commandes/commandes_abandonnees_france.sql}}"
+UPDATE_SQL="${2:-${UPDATE_SQL:-commandes/maj_statut_ok.sql}}"
+DETAIL_SQL="${3:-${DETAIL_SQL-commandes/detail_commandes.sql}}"
 
 mkdir -p "$LOG_DIR"
 # Un seul fichier de log par jour pour tous les jobs ; chaque lancement y ajoute un bloc horodaté (heure:minute)
@@ -30,8 +30,8 @@ ids=""
 
 sql_path() {
     case "$1" in
-        */*) echo "$1" ;;
-        *)   echo "$SQL_DIR/$1" ;;
+        /*) echo "$1" ;;
+        *)  echo "$SQL_DIR/$1" ;;
     esac
 }
 
