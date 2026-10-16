@@ -95,6 +95,18 @@ Table `livraison` :
 | `statut` | VARCHAR(20) : `LIVRE`, `EN_ATTENTE` (puis `EXPEDIE` après le job livraisons) |
 | `date_expedition` | DATE, nullable |
 
+Table `historique` (alimentée automatiquement par des triggers `AFTER UPDATE` sur `client`, `produit`, `commande` et `livraison`) :
+
+| Colonne | Type |
+|---|---|
+| `id` | BIGINT, auto-incrément, clé primaire |
+| `nom_table` | VARCHAR(40) : table modifiée |
+| `date_maj` | DATETIME : date de la mise à jour |
+| `valeurs_avant` | JSON : toutes les colonnes de la ligne avant la mise à jour |
+| `valeurs_apres` | JSON : toutes les colonnes de la ligne après la mise à jour |
+
+Exemple : `SELECT nom_table, date_maj, valeurs_avant, valeurs_apres FROM historique ORDER BY id DESC;`
+
 ### Régénérer les données depuis zéro
 
 `init.sql` ne s'exécute que sur une base vide. Pour repartir de l'état initial (par exemple après avoir lancé le script) :

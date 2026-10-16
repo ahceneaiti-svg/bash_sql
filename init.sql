@@ -89,3 +89,41 @@ INSERT INTO livraison (commande_id, transporteur, statut, date_expedition) VALUE
 (11, 'Colissimo',      'LIVRE',      '2026-04-10'),
 (13, 'Poste Italiane', 'EN_ATTENTE', NULL),
 (14, 'DHL',            'LIVRE',      '2026-05-02');
+
+-- Historique des modifications : un trigger AFTER UPDATE par table y écrit l'état de la ligne avant/après
+CREATE TABLE historique (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    nom_table     VARCHAR(40) NOT NULL,
+    date_maj      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    valeurs_avant JSON        NOT NULL,
+    valeurs_apres JSON        NOT NULL,
+    INDEX idx_historique_table_date (nom_table, date_maj)
+);
+
+CREATE TRIGGER trg_client_maj AFTER UPDATE ON client FOR EACH ROW
+INSERT INTO historique (nom_table, valeurs_avant, valeurs_apres) VALUES (
+    'client',
+    JSON_OBJECT('id', OLD.id, 'nom', OLD.nom, 'prenom', OLD.prenom, 'pays', OLD.pays, 'adresse', OLD.adresse),
+    JSON_OBJECT('id', NEW.id, 'nom', NEW.nom, 'prenom', NEW.prenom, 'pays', NEW.pays, 'adresse', NEW.adresse)
+);
+
+CREATE TRIGGER trg_produit_maj AFTER UPDATE ON produit FOR EACH ROW
+INSERT INTO historique (nom_table, valeurs_avant, valeurs_apres) VALUES (
+    'produit',
+    JSON_OBJECT('id', OLD.id, 'nom', OLD.nom, 'categorie', OLD.categorie, 'prix', OLD.prix, 'stock', OLD.stock),
+    JSON_OBJECT('id', NEW.id, 'nom', NEW.nom, 'categorie', NEW.categorie, 'prix', NEW.prix, 'stock', NEW.stock)
+);
+
+CREATE TRIGGER trg_commande_maj AFTER UPDATE ON commande FOR EACH ROW
+INSERT INTO historique (nom_table, valeurs_avant, valeurs_apres) VALUES (
+    'commande',
+    JSON_OBJECT('id', OLD.id, 'statut', OLD.statut, 'client_id', OLD.client_id, 'date', OLD.date, 'prix', OLD.prix, 'produit_id', OLD.produit_id),
+    JSON_OBJECT('id', NEW.id, 'statut', NEW.statut, 'client_id', NEW.client_id, 'date', NEW.date, 'prix', NEW.prix, 'produit_id', NEW.produit_id)
+);
+
+CREATE TRIGGER trg_livraison_maj AFTER UPDATE ON livraison FOR EACH ROW
+INSERT INTO historique (nom_table, valeurs_avant, valeurs_apres) VALUES (
+    'livraison',
+    JSON_OBJECT('id', OLD.id, 'commande_id', OLD.commande_id, 'transporteur', OLD.transporteur, 'statut', OLD.statut, 'date_expedition', OLD.date_expedition),
+    JSON_OBJECT('id', NEW.id, 'commande_id', NEW.commande_id, 'transporteur', NEW.transporteur, 'statut', NEW.statut, 'date_expedition', NEW.date_expedition)
+);
