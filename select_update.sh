@@ -24,7 +24,7 @@ DETAIL_SQL="${3:-${DETAIL_SQL-commandes/detail_commandes.sql}}"
 
 mkdir -p "$LOG_DIR"
 # Un seul fichier de log par jour pour tous les jobs ; chaque lancement y ajoute un bloc horodaté (heure:minute)
-LOG_FILE="$LOG_DIR/maj_commandes_$(date '+%Y-%m-%d').log"
+LOG_FILE="$LOG_DIR/sql_updates_$(date '+%Y-%m-%d').log"
 HEURE=$(date '+%H:%M')
 ids=""
 
@@ -60,7 +60,7 @@ log "=== Lancement à ${HEURE} ($(date '+%F')) ==="
 log "Fichiers SQL : select=${SELECT_SQL} | update=${UPDATE_SQL} | detail=${DETAIL_SQL:-aucun}"
 
 # Rétention : suppression des logs plus vieux que RETENTION_JOURS jours
-purges=$(find "$LOG_DIR" -maxdepth 1 -type f -name 'maj_commandes_*.log' \
+purges=$(find "$LOG_DIR" -maxdepth 1 -type f -name 'sql_updates_*.log' \
     -mmin +$((RETENTION_JOURS * 1440)) -print -delete)
 if [ -n "$purges" ]; then
     log "--- Logs supprimés (rétention ${RETENTION_JOURS} jours) ---"

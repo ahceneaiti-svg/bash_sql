@@ -238,7 +238,7 @@ S'il n'y a plus de commande `ABONDONNE` pour la France, le script affiche `Aucun
 
 ## 5. Logs
 
-Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `maj_commandes_<AAAA-MM-JJ>.log`, commun à tous les jobs.
+Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `sql_updates_<AAAA-MM-JJ>.log`, commun à tous les jobs.
 
 Chaque lancement du script **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
 
@@ -252,12 +252,12 @@ Si aucune commande `ABONDONNE` française n'est trouvée, le bloc contient seule
 
 ```bash
 ls logs/
-cat logs/maj_commandes_*.log
+cat logs/sql_updates_*.log
 ```
 
 ### Rétention et nettoyage
 
-À chaque lancement, avant le traitement, le script supprime les fichiers `maj_commandes_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
+À chaque lancement, avant le traitement, le script supprime les fichiers `sql_updates_*.log` plus vieux que `RETENTION_JOURS` jours (7 par défaut, soit 7 × 24 h depuis leur dernière modification). Les fichiers supprimés sont listés dans le bloc du lancement (`--- Logs supprimés ---`). Les autres fichiers du dossier ne sont jamais touchés.
 
 Changer la durée : `docker compose exec -e RETENTION_JOURS=30 mysql select_update.sh` (ponctuel), ou `environment:` dans `docker-compose.yml` pour le cron.
 
