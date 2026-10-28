@@ -14,7 +14,7 @@ set -euo pipefail
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_USER="${DB_USER:-root}"
-DB_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
+DB_PASSWORD="${DB_PASSWORD:-root}"
 DB_NAME="${DB_NAME:-ecommerce}"
 LOG_DIR="${LOG_DIR:-/logs}"
 RETENTION_JOURS="${RETENTION_JOURS:-7}"

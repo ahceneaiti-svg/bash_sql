@@ -8,6 +8,8 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `
 |---|---|
 | `Dockerfile` | Image `mysql:8.4` + `init.sql` + script bash |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck, volume `./logs`) |
+| `.env.example` | Modèle de configuration (utilisateur, mot de passe, base, dossier de logs) |
+| `init_user.sh` | Crée `DB_USER` s’il n’est pas `root` |
 | `sql/<domaine>/*.sql` | Un dossier par job : requête de détection, `maj_*.sql`, `detail_*.sql` (voir section 4) |
 | `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique : parcourt les dossiers sql/, exécute un SELECT puis un UPDATE sur la liste d'id obtenue pour chacun, écrit les logs |
@@ -17,6 +19,7 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `
 
 - Docker et Docker Compose v2 (`docker compose`)
 - Port `3306` libre sur la machine
+- Un fichier `.env` (optionnel) : `cp .env.example .env` puis adapter les valeurs (voir « Fichier `.env` » en section 4)
 
 ## 1. Lancer le conteneur
 
@@ -120,7 +123,7 @@ Pour un autre jeu de données, modifier les `INSERT` de `init.sql` puis refaire 
 
 ## 3. Se connecter à la base
 
-Identifiants : utilisateur `root`, mot de passe `root`, base `ecommerce`.
+Identifiants : ceux de `.env` (`DB_USER`, `DB_PASSWORD`, `DB_NAME`). Sans `.env` : utilisateur `root`, mot de passe `root`, base `ecommerce`. Les exemples ci-dessous utilisent ces valeurs par défaut.
 
 Depuis le conteneur :
 
@@ -208,21 +211,31 @@ WHERE id IN (4,9,15);
 
 Si un job ne détecte aucune ligne, le log contient `[dossier] Aucune ligne détectée par ...` et rien n'est modifié ; le script passe au dossier suivant.
 
+### Fichier `.env`
+
+`docker-compose.yml` lit un fichier `.env` à la racine (non versionné). Point de départ :
+
+```bash
+cp .env.example .env    # puis adapter DB_USER, DB_PASSWORD, DB_NAME, LOG_DIR
+```
+
+`LOG_DIR` est le dossier des logs côté hôte (monté sur `/logs` dans le conteneur). Si `DB_USER` n'est pas `root`, `init_user.sh` crée l'utilisateur avec tous les droits sur `DB_NAME` ; le mot de passe `root` du serveur reste `DB_PASSWORD`. Changer ces valeurs après la 1re initialisation demande de recréer le volume de données (`docker compose down -v`).
+
 ### Variables d'environnement (optionnelles)
 
 | Variable | Défaut |
 |---|---|
 | `DB_HOST` | `localhost` |
 | `DB_USER` | `root` |
-| `MYSQL_ROOT_PASSWORD` | `root` |
+| `DB_PASSWORD` | `root` |
 | `DB_NAME` | `ecommerce` |
-| `LOG_DIR` | `/logs` |
+| `LOG_DIR` | `/logs` (dans le conteneur ; `docker-compose.yml` le fixe, le `LOG_DIR` du `.env` désigne le dossier hôte) |
 | `SQL_DIR` | `/usr/local/share/sql` (dossier contenant les sous-dossiers de jobs) |
 | `RETENTION_JOURS` | `7` |
 
 ## 5. Logs
 
-Un seul fichier de log par jour dans `./logs/` (dossier monté sur `/logs` dans le conteneur) : `sql_updates_<AAAA-MM-JJ>.log`, commun à tous les jobs.
+Un seul fichier de log par jour dans `./logs/` par défaut, ou dans le dossier `LOG_DIR` du `.env` (dossier monté sur `/logs` dans le conteneur) : `sql_updates_<AAAA-MM-JJ>.log`, commun à tous les jobs.
 
 Chaque lancement du script (tous les jobs) **ajoute un bloc** commençant par `=== Lancement à HH:MM (date) ===` (heure et minute du lancement), suivi de :
 
@@ -271,5 +284,5 @@ Chaque exécution ajoute un bloc dans le log du jour (voir section 5).
 
 ## Notes
 
-- Le mot de passe `root` en clair dans `docker-compose.yml` convient pour un test local uniquement.
+- Le fichier `.env` contient le mot de passe : il est ignoré par git, seul `.env.example` est versionné. Les valeurs par défaut (`root`/`root`) conviennent pour un test local uniquement.
 - Le statut `ABONDONNE` est écrit tel quel (et non `ABANDONNE`) pour rester cohérent avec les données et le script.

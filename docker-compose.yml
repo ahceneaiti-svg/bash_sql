@@ -2,15 +2,20 @@ services:
   mysql:
     build: .
     container_name: ecommerce-mysql
+    # Les variables DB_* et LOG_DIR viennent du fichier .env (voir .env.example)
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ecommerce
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-ecommerce}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_NAME: ${DB_NAME:-ecommerce}
+      LOG_DIR: /logs
     volumes:
-      - ./logs:/logs
+      - ${LOG_DIR:-./logs}:/logs
     ports:
       - "3306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 5s
       timeout: 3s
       retries: 20
