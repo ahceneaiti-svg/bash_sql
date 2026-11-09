@@ -6,7 +6,7 @@ Le script `select_update.sh` et les requêtes `sql/` tournent dans un **CronJob*
 cluster kind "sql-updates"                      hôte docker
 ┌──────────────────────────┐   172.18.0.1:3306  ┌──────────────────────┐
 │ CronJob sql-updates      │ ─────────────────▶ │ ecommerce-mysql      │
-│  └ Job/Pod bash_cj:1.0   │                    │ (docker compose)     │
+│  └ Job/Pod bash_cj:1.1   │                    │ (docker compose)     │
 └──────────────────────────┘                    └──────────────────────┘
 ```
 
@@ -16,7 +16,9 @@ cluster kind "sql-updates"                      hôte docker
 |---|---|
 | `namespace.yaml` | Namespace `sql-updates` |
 | `configmap.yaml` | Configuration non secrète : `DB_HOST`, `DB_PORT`, `DB_NAME`, `RETENTION_JOURS` |
-| `cronjob.yaml` | CronJob `0 6-22 * * *` (Europe/Paris), `concurrencyPolicy: Forbid`, image `ahceneaiti/bash_cj:1.0` |
+| `cronjob.yaml` | CronJob `0 6-22 * * *` (Europe/Paris), `concurrencyPolicy: Forbid`, sans argument = tous les jobs |
+| `job-manuel.yaml` | Job unique à la demande, un seul job SQL via `args: ["--job", "<dossier>"]` |
+| `run-job.sh` | Lance un ou plusieurs jobs SQL depuis le CronJob, affiche les logs, supprime le Job |
 | *(secret)* | `sql-updates-db` : `DB_USER` et `DB_PASSWORD`, **non versionné**, créé depuis `.env` |
 
 Le secret est lu par le CronJob (`secretKeyRef`), la configuration par `envFrom` du ConfigMap.
@@ -41,8 +43,8 @@ docker compose ps          # attendre "healthy"
 Base `busybox:1.36-musl` ; un stage `alpine` installe `bash`, `mariadb-client` et `mariadb-connector-c` (plugin `caching_sha2_password`, requis par MySQL 8.4), copiés ensuite sur busybox.
 
 ```bash
-docker build -f Dockerfile.cronjob -t ahceneaiti/bash_cj:1.0 .
-docker push ahceneaiti/bash_cj:1.0
+docker build -f Dockerfile.cronjob -t ahceneaiti/bash_cj:1.1 .
+docker push ahceneaiti/bash_cj:1.1
 ```
 
 Après modification du script ou de `sql/`, utiliser un **nouveau tag** (`1.1`, ...) et mettre à jour `image:` dans `cronjob.yaml` : avec `imagePullPolicy: IfNotPresent`, un tag réutilisé ne serait pas retiré par les nœuds.
@@ -91,15 +93,28 @@ kubectl -n sql-updates logs job/test-1
 kubectl -n sql-updates delete job test-1
 ```
 
-Un seul job SQL (ex. `livraisons`), en passant le dossier en argument :
+Un seul job SQL : voir la section 7.
+
+## 7. Lancer un seul job SQL (argument optionnel)
+
+`select_update.sh` accepte `--job <dossier>` (répétable, ou dossier seul). Sans argument : tous les jobs de `sql/`. Un dossier inconnu fait échouer le Job (code retour 1).
 
 ```bash
-kubectl -n sql-updates create job test-2 --from=cronjob/sql-updates --dry-run=client -o json \
-  | python3 -c 'import json,sys; j=json.load(sys.stdin); j["spec"]["template"]["spec"]["containers"][0]["args"]=["livraisons"]; print(json.dumps(j))' \
-  | kubectl apply -f -
+k8s/run-job.sh                     # tous les jobs
+k8s/run-job.sh livraisons          # un seul job
+k8s/run-job.sh commandes produits  # plusieurs
 ```
 
-## 7. Exploitation
+Ou avec le manifeste `job-manuel.yaml` (éditer `args`, puis `create` et non `apply`, à cause de `generateName`) :
+
+```bash
+kubectl create -f k8s/job-manuel.yaml
+kubectl -n sql-updates get jobs
+```
+
+Pour fixer le job du CronJob planifié lui-même, ajouter dans `cronjob.yaml`, sous le conteneur : `args: ["--job", "commandes"]`.
+
+## 8. Exploitation
 
 | Action | Commande |
 |---|---|
@@ -122,7 +137,7 @@ Les logs sont sur stdout. Le fichier `sql_updates_*.log` du pod est dans un `emp
 Shell de débogage dans un pod (puis `mysql -h <DB_HOST> -u<user> -p<mdp> ecommerce`) :
 
 ```bash
-kubectl -n sql-updates run -it --rm dbg --image=ahceneaiti/bash_cj:1.0 --restart=Never --command -- sh
+kubectl -n sql-updates run -it --rm dbg --image=ahceneaiti/bash_cj:1.1 --restart=Never --command -- sh
 ```
 
 ## Supprimer

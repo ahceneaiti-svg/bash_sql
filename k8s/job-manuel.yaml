@@ -1,0 +1,46 @@
+# Lancement manuel d'un seul job SQL (hors planification du CronJob).
+# Le dossier de sql/ est passé en argument : remplacer "commandes" par le job voulu
+# (commandes, livraisons, produits) ou utiliser le script k8s/run-job.sh.
+# Création : kubectl create -f k8s/job-manuel.yaml   (generateName : pas de "apply")
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: sql-updates-manuel-
+  namespace: sql-updates
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: select-update
+          image: ahceneaiti/bash_cj:1.1
+          imagePullPolicy: IfNotPresent
+          args: ["--job", "commandes"]
+          envFrom:
+            - configMapRef:
+                name: sql-updates-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sql-updates-db
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sql-updates-db
+                  key: DB_PASSWORD
+            - name: LOG_DIR
+              value: /logs
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+      volumes:
+        - name: logs
+          emptyDir: {}

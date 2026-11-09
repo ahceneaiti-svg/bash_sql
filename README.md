@@ -2,7 +2,7 @@
 
 Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `produit`, `commande`, `livraison`) pré-remplies, et un script bash, exécuté par un **CronJob Kubernetes**, qui met à jour les données selon des requêtes SQL (ex. passe au statut `OK` les commandes `ABONDONNE` des clients de France).
 
-Répartition : docker compose ne fait tourner que le **serveur MySQL** ; le script et les requêtes s'exécutent dans le CronJob (image `ahceneaiti/bash_cj:1.0`). Tout ce qui concerne Kubernetes est dans [`k8s/README.md`](k8s/README.md).
+Répartition : docker compose ne fait tourner que le **serveur MySQL** ; le script et les requêtes s'exécutent dans le CronJob (image `ahceneaiti/bash_cj:1.1`). Tout ce qui concerne Kubernetes est dans [`k8s/README.md`](k8s/README.md).
 
 ## Contenu
 
@@ -15,7 +15,7 @@ Répartition : docker compose ne fait tourner que le **serveur MySQL** ; le scri
 | `sql/<domaine>/*.sql` | Un dossier par job : requête de détection, `maj_*.sql`, `detail_*.sql` (voir section 4) |
 | `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique, lancé par le CronJob : parcourt les dossiers sql/, exécute un SELECT puis un UPDATE sur la liste d'id obtenue pour chacun, écrit les logs |
-| `Dockerfile.cronjob` | Image du CronJob `ahceneaiti/bash_cj:1.0` (busybox + bash + client mysql + script + `sql/`) |
+| `Dockerfile.cronjob` | Image du CronJob `ahceneaiti/bash_cj:1.1` (busybox + bash + client mysql + script + `sql/`) |
 | `k8s/` | Manifestes Kubernetes (namespace, ConfigMap, CronJob) et leur [README](k8s/README.md) |
 
 ## Prérequis
@@ -155,21 +155,27 @@ docker compose exec mysql mysql -uroot -proot ecommerce \
 Le script est lancé par le CronJob `sql-updates` (toutes les heures pleines de 6h à 22h, voir `k8s/README.md`). Pour un lancement immédiat, hors planification :
 
 ```bash
-kubectl -n sql-updates create job --from=cronjob/sql-updates manuel-1
-kubectl -n sql-updates logs job/manuel-1
-kubectl -n sql-updates delete job manuel-1
+k8s/run-job.sh                  # tous les jobs
+k8s/run-job.sh livraisons       # un seul job
+k8s/run-job.sh commandes produits
 ```
+
+`k8s/run-job.sh` crée un Job à partir du CronJob, attend sa fin, affiche les logs puis le supprime. Un Job unique prêt à l'emploi existe aussi : `k8s/job-manuel.yaml` (voir `k8s/README.md`).
 
 Le script est **générique** : il ne contient aucune requête métier ni aucun nom de fichier SQL. Il parcourt les sous-dossiers de `/usr/local/share/sql` (dossier `sql/` du projet, copié dans l'image) dans l'ordre alphabétique. **Un dossier = un job** : pour chacun il exécute le `SELECT`, construit la liste d'id à partir de la 1re colonne du résultat, exécute l'`UPDATE` sur cette liste et journalise le tout.
 
 ```
-select_update.sh [dossier ...]
+select_update.sh [-j|--job dossier] [dossier ...]
 ```
 
 | Argument | Rôle |
 |---|---|
 | (aucun) | tous les sous-dossiers de `sql/`, un par un |
-| `dossier` | un ou plusieurs noms de sous-dossier (ex. `commandes`) pour ne lancer que ces jobs |
+| `-j dossier`, `--job dossier` | ne lance que ce job (option répétable) |
+| `dossier` | équivalent à `--job dossier` (forme positionnelle) |
+| `-h`, `--help` | affiche l'aide |
+
+Code retour : `0` si tout s'est bien passé, `1` si un job demandé n'existe pas (le Job Kubernetes échoue), `2` pour une option invalide.
 
 Les fichiers d'un dossier sont repérés par leur préfixe :
 
@@ -189,13 +195,7 @@ Un dossier qui ne respecte pas cette convention est ignoré avec un message dans
 | `livraisons` : livraisons en attente d'Italie → `EXPEDIE` (date du jour) | `livraisons_en_attente_italie.sql` | `maj_livraison_expediee.sql` | `detail_livraisons.sql` |
 | `produits` : stock faible (< 10) → réappro +50 | `produits_stock_faible.sql` | `maj_reappro_stock.sql` | `detail_produits.sql` |
 
-Le CronJob lance tous les jobs. Pour n'en lancer qu'un (ex. `livraisons`), passer le nom du dossier en argument du conteneur :
-
-```bash
-kubectl -n sql-updates create job manuel-2 --from=cronjob/sql-updates --dry-run=client -o json \
-  | python3 -c 'import json,sys; j=json.load(sys.stdin); j["spec"]["template"]["spec"]["containers"][0]["args"]=["livraisons"]; print(json.dumps(j))' \
-  | kubectl apply -f -
-```
+Le CronJob planifié lance tous les jobs (aucun argument). L'argument optionnel `--job` permet d'en lancer un seul : `k8s/run-job.sh livraisons`, ou directement `select_update.sh --job livraisons` dans un conteneur.
 
 Pour ajouter un job : créer un dossier `sql/<domaine>/` avec ses fichiers, puis reconstruire et pousser l'image avec un nouveau tag, et mettre à jour `image:` dans `k8s/cronjob.yaml` (voir `k8s/README.md`). Il est pris en compte automatiquement, sans modifier le script.
 
@@ -272,7 +272,7 @@ Le bloc contient une section par job (dossier), préfixée `[dossier]`. Si un jo
 
 Le CronJob remplace l'ancien `crontab` de l'hôte (qui appelait `docker compose exec`, supprimé). Il se connecte au MySQL de docker compose par le réseau (`DB_HOST`/`DB_PORT`).
 
-Image `ahceneaiti/bash_cj:1.0` : base `busybox:1.36-musl` + bash + client mysql + `select_update.sh` + `sql/`, `ENTRYPOINT` = `select_update.sh` (sans argument : tous les jobs).
+Image `ahceneaiti/bash_cj:1.1` : base `busybox:1.36-musl` + bash + client mysql + `select_update.sh` + `sql/`, `ENTRYPOINT` = `select_update.sh` (sans argument : tous les jobs).
 
 Construction du cluster, ConfigMap, Secret, CronJob, test et dépannage : voir **[k8s/README.md](k8s/README.md)**.
 

@@ -3,14 +3,42 @@
 # il se connecte à la base, exécute la requête SELECT, construit la liste d'id (1re colonne du résultat),
 # exécute la requête UPDATE sur cette liste et journalise le tout. Toute la logique métier est dans les .sql.
 #
-# Usage : select_update.sh [dossier ...]
-#   sans argument : tous les sous-dossiers de $SQL_DIR, dans l'ordre alphabétique
-#   dossier       : nom d'un sous-dossier de $SQL_DIR (ex. commandes) pour ne lancer que ce job
+# Usage : select_update.sh [-j|--job dossier] [dossier ...]
+#   sans argument      : tous les sous-dossiers de $SQL_DIR, dans l'ordre alphabétique
+#   -j, --job dossier  : ne lance que ce job (option répétable) ; équivalent à passer le dossier seul
+#   dossier            : nom d'un sous-dossier de $SQL_DIR (ex. commandes) pour ne lancer que ce job
+#   -h, --help         : affiche cette aide
+# Code retour : 0 si tout s'est bien passé, 1 si un job demandé n'existe pas, 2 en cas d'option invalide.
 # Convention de nommage dans un dossier :
 #   maj_*.sql     : requête de mise à jour (obligatoire), le marqueur {{IDS}} est remplacé par la liste d'id
 #   detail_*.sql  : requête de détail (optionnelle), même marqueur, loggée avant/après la mise à jour
 #   autre *.sql   : requête de détection (obligatoire), 1re colonne = id
 set -euo pipefail
+
+usage() {
+    echo "Usage : $(basename "$0") [-j|--job dossier] [dossier ...]"
+    echo "  sans argument : tous les jobs du dossier SQL_DIR"
+    echo "  -j, --job     : ne lance que ce job (répétable)"
+}
+
+# Arguments : jobs demandés (option -j/--job ou dossier seul) ; vide = tous les jobs
+jobs=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -j|--job)
+            if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                echo "Option $1 : nom de dossier manquant." >&2
+                usage >&2
+                exit 2
+            fi
+            jobs+=("$2")
+            shift 2
+            ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Option inconnue : $1" >&2; usage >&2; exit 2 ;;
+        *) jobs+=("$1"); shift ;;
+    esac
+done
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-3306}"
@@ -128,11 +156,8 @@ if [ -n "$purges" ]; then
     log "$purges"
 fi
 
-# Jobs : dossiers passés en argument, sinon tous les sous-dossiers de $SQL_DIR
-if [ "$#" -gt 0 ]; then
-    jobs=("$@")
-else
-    jobs=()
+# Jobs : dossiers demandés, sinon tous les sous-dossiers de $SQL_DIR
+if [ "${#jobs[@]}" -eq 0 ]; then
     for d in "$SQL_DIR"/*/; do
         [ -d "$d" ] && jobs+=("$(basename "$d")")
     done
@@ -144,11 +169,14 @@ if [ "${#jobs[@]}" -eq 0 ]; then
     exit 0
 fi
 
+erreurs=0
 for job in "${jobs[@]}"; do
     if [ ! -d "$SQL_DIR/$job" ]; then
         log "[${job}] Dossier introuvable dans ${SQL_DIR}."
         log ""
+        erreurs=1
         continue
     fi
     run_job "$job"
 done
+exit "$erreurs"

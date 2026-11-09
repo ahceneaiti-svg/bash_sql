@@ -19,7 +19,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: select-update
-              image: ahceneaiti/bash_cj:1.0
+              image: ahceneaiti/bash_cj:1.1
               imagePullPolicy: IfNotPresent
               envFrom:
                 - configMapRef:
