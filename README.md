@@ -4,25 +4,40 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `
 
 Répartition : docker compose ne fait tourner que le **serveur MySQL** ; le script et les requêtes s'exécutent dans le CronJob (image `ahceneaiti/bash_cj:1.1`). Tout ce qui concerne Kubernetes est dans [`k8s/README.md`](k8s/README.md).
 
+## Démarrage rapide
+
+```bash
+cp .env.example .env                                # adapter les identifiants
+docker compose up -d --build                        # serveur MySQL (port 3306)
+kind create cluster --name sql-updates              # cluster Kubernetes local
+# renseigner DB_HOST dans k8s/configmap.yaml (passerelle du réseau docker "kind"), puis :
+kubectl apply -f k8s/namespace.yaml -f k8s/configmap.yaml
+kubectl -n sql-updates create secret generic sql-updates-db --from-env-file=.env
+kubectl apply -f k8s/cronjob.yaml
+k8s/run-job.sh                                      # lancer les jobs tout de suite (ou : k8s/run-job.sh livraisons)
+```
+
+Détails, explications et dépannage : `k8s/README.md`.
+
 ## Contenu
 
 | Fichier | Rôle |
 |---|---|
-| `Dockerfile` | Image `mysql:8.4` + `init.sql` (serveur MySQL) |
+| `Dockerfile` | Image `mysql:8.4` + `init.sql` (serveur MySQL ; embarque aussi `select_update.sh` et `sql/`, non utilisés depuis le passage au CronJob) |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck) |
-| `.env.example` | Modèle de configuration (utilisateur, mot de passe, base, dossier de logs) |
+| `.env.example` | Modèle de configuration (utilisateur, mot de passe, base) : lu par docker compose et par le secret Kubernetes |
 | `init_user.sh` | Crée `DB_USER` s’il n’est pas `root` |
 | `sql/<domaine>/*.sql` | Un dossier par job : requête de détection, `maj_*.sql`, `detail_*.sql` (voir section 4) |
 | `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique, lancé par le CronJob : parcourt les dossiers sql/, exécute un SELECT puis un UPDATE sur la liste d'id obtenue pour chacun, écrit les logs |
 | `Dockerfile.cronjob` | Image du CronJob `ahceneaiti/bash_cj:1.1` (busybox + bash + client mysql + script + `sql/`) |
-| `k8s/` | Manifestes Kubernetes (namespace, ConfigMap, CronJob) et leur [README](k8s/README.md) |
+| `k8s/` | Manifestes Kubernetes (`namespace`, `configmap`, `cronjob`, `job-manuel`), script `run-job.sh` et [README](k8s/README.md) |
 
 ## Prérequis
 
 - Docker et Docker Compose v2 (`docker compose`)
 - Port `3306` libre sur la machine
-- Pour le CronJob (voir `k8s/README.md`) : `kubectl`, `kind` et un accès à Docker Hub
+- Pour le CronJob (voir `k8s/README.md`) : `kubectl`, `kind`, `python3` (pour `k8s/run-job.sh`) et un accès à Docker Hub
 - Un fichier `.env` (optionnel) : `cp .env.example .env` puis adapter les valeurs (voir « Fichier `.env` » en section 4)
 
 ## 1. Lancer le conteneur

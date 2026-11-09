@@ -25,7 +25,7 @@ Le secret est lu par le CronJob (`secretKeyRef`), la configuration par `envFrom`
 
 ## Prérequis
 
-- `docker`, `kubectl`, `kind`
+- `docker`, `kubectl`, `kind`, `python3` (utilisé par `run-job.sh`)
 - Un fichier `.env` à la racine du projet (`cp .env.example .env`)
 - Accès à Docker Hub (`docker login`) pour pousser l'image
 
@@ -129,7 +129,9 @@ Les logs sont sur stdout. Le fichier `sql_updates_*.log` du pod est dans un `emp
 
 | Symptôme | Cause probable |
 |---|---|
-| Pod `Completed` sans mise à jour, log s'arrête après `Fichiers SQL : ...` | Connexion MySQL refusée (erreurs masquées par le script) : vérifier `DB_HOST`, le port `3306`, les identifiants du secret |
+| Pod en `Error`, log qui s'arrête après `Fichiers SQL : ...` | Connexion MySQL refusée (erreurs mysql masquées par le script) : vérifier `DB_HOST`, le port `3306`, les identifiants du secret |
+| Job en échec, log `Dossier introuvable dans /usr/local/share/sql` | Nom de job inconnu dans `--job` / `run-job.sh` : doit être un sous-dossier de `sql/` (`commandes`, `livraisons`, `produits`) |
+| `Aucune ligne détectée` | Normal : les lignes ont déjà été mises à jour (relancer `docker compose down && docker compose up -d` pour réinitialiser les données) |
 | Log : `Plugin caching_sha2_password could not be loaded` | Image sans `mariadb-connector-c` |
 | `ImagePullBackOff` | Image absente de Docker Hub ou tag incorrect dans `cronjob.yaml` |
 | Aucune exécution à l'heure prévue | CronJob suspendu, ou horaire en `Europe/Paris` (`timeZone` du CronJob) |
