@@ -16,7 +16,7 @@ cluster kind "sql-updates"                      hôte docker
 |---|---|
 | `namespace.yaml` | Namespace `sql-updates` |
 | `configmap.yaml` | Configuration non secrète : `DB_HOST`, `DB_PORT`, `DB_NAME`, `RETENTION_JOURS` |
-| `cronjob.yaml` | CronJob `0 6-22 * * *` (Europe/Paris), `concurrencyPolicy: Forbid`, sans argument = tous les jobs |
+| `cronjob.yaml` | CronJob `0 6-22 * * *` (Europe/Paris), `concurrencyPolicy: Forbid`, `args` optionnel (commenté) : sans argument, tous les jobs ; avec `--job`, uniquement ceux listés |
 | `job-manuel.yaml` | Job unique à la demande, un seul job SQL via `args: ["--job", "<dossier>"]` |
 | `run-job.sh` | Lance un ou plusieurs jobs SQL depuis le CronJob, affiche les logs, supprime le Job |
 | *(secret)* | `sql-updates-db` : `DB_USER` et `DB_PASSWORD`, **non versionné**, créé depuis `.env` |
@@ -112,7 +112,23 @@ kubectl create -f k8s/job-manuel.yaml
 kubectl -n sql-updates get jobs
 ```
 
-Pour que le CronJob planifié ne lance qu'un job, décommenter la ligne `args: ["--job", "commandes"]` dans `cronjob.yaml` (sous `imagePullPolicy`), puis `kubectl apply -f k8s/cronjob.yaml`. Les `--job` sont répétables.
+### Planifier un seul job (argument dans `cronjob.yaml`)
+
+`cronjob.yaml` contient une ligne `args` commentée, sous `imagePullPolicy` :
+
+```yaml
+              # args: ["--job", "commandes"]
+```
+
+Par défaut elle est inactive : chaque exécution planifiée lance tous les jobs de `sql/`. Pour ne planifier qu'un job :
+
+1. Décommenter la ligne et choisir le job (`commandes`, `livraisons` ou `produits`). Pour plusieurs jobs, répéter l'option : `args: ["--job", "commandes", "--job", "produits"]`.
+2. Appliquer : `kubectl apply -f k8s/cronjob.yaml`.
+3. Vérifier : `kubectl -n sql-updates get cronjob sql-updates -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].args}'` doit afficher `["--job","commandes"]`.
+
+Les prochaines exécutions planifiées (et les Jobs créés avec `--from=cronjob/sql-updates`, dont `run-job.sh` sans argument) ne lancent alors que ces jobs. Pour revenir à tous les jobs, recommenter la ligne et refaire `kubectl apply`.
+
+`run-job.sh <dossier>` reste utilisable à tout moment : il remplace les `args` du CronJob pour ce lancement ponctuel.
 
 ## 8. Exploitation
 
