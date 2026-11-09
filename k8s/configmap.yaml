@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sql-updates-config
+  namespace: sql-updates
+data:
+  # Adresse du MySQL docker, vue depuis les pods :
+  #   minikube (driver docker) : host.minikube.internal
+  #   kind                     : IP de la passerelle du réseau docker "kind" (docker network inspect kind)
+  DB_HOST: 172.18.0.1
+  DB_PORT: "3306"
+  DB_NAME: ecommerce
+  RETENTION_JOURS: "7"

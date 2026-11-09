@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sql-updates
+  namespace: sql-updates
+spec:
+  # Toutes les heures pleines de 6h à 22h (comme le crontab d'origine)
+  schedule: "0 6-22 * * *"
+  timeZone: Europe/Paris
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: select-update
+              image: ahceneaiti/bash_cj:1.0
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef:
+                    name: sql-updates-config
+              env:
+                - name: DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: sql-updates-db
+                      key: DB_USER
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: sql-updates-db
+                      key: DB_PASSWORD
+                # Les logs vont aussi sur stdout (kubectl logs) ; le fichier est jetable
+                - name: LOG_DIR
+                  value: /logs
+              volumeMounts:
+                - name: logs
+                  mountPath: /logs
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+          volumes:
+            - name: logs
+              emptyDir: {}

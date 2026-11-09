@@ -13,6 +13,7 @@
 set -euo pipefail
 
 DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-root}"
 DB_PASSWORD="${DB_PASSWORD:-root}"
 DB_NAME="${DB_NAME:-ecommerce}"
@@ -27,11 +28,11 @@ HEURE=$(date '+%H:%M')
 ids=""
 
 run_sql() {
-    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1" 2>/dev/null
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B -e "$1" 2>/dev/null
 }
 
 run_sql_file() {
-    mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B < "$1" 2>/dev/null
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -N -B < "$1" 2>/dev/null
 }
 
 # Lit un fichier .sql et remplace {{IDS}} par la liste d'id (valeurs issues de la base)

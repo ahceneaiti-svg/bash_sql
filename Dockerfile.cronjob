@@ -1,0 +1,19 @@
+# Image du CronJob : base busybox + bash + client mysql + script + requêtes SQL.
+# Le serveur MySQL reste dans son propre conteneur (docker compose), le job s'y connecte par le réseau.
+
+# Stage 1 : installe bash et le client mysql dans un rootfs séparé (/out), sans apk ni cache
+FROM alpine:3.20 AS deps
+RUN apk add --no-cache --initdb --root /out \
+        --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories \
+        bash mariadb-client mariadb-connector-c \
+    && rm -rf /out/lib/apk /out/var/cache /out/etc/apk /out/usr/share/man \
+    && ln -sf mariadb /out/usr/bin/mysql
+
+# Stage 2 : base busybox (musl) + dépendances copiées
+FROM busybox:1.36-musl
+COPY --from=deps /out/ /
+COPY sql/ /usr/local/share/sql/
+COPY select_update.sh /usr/local/bin/select_update.sh
+RUN chmod +x /usr/local/bin/select_update.sh
+
+ENTRYPOINT ["/usr/local/bin/select_update.sh"]

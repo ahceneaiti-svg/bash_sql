@@ -14,11 +14,14 @@ Conteneur MySQL 8.4 avec une base `ecommerce`, quatre tables liées (`client`, `
 | `init.sql` | Création de la base, des tables `client`, `produit`, `commande`, `livraison` et du jeu de données |
 | `select_update.sh` | Script générique : parcourt les dossiers sql/, exécute un SELECT puis un UPDATE sur la liste d'id obtenue pour chacun, écrit les logs |
 | `logs/` | Fichiers de logs générés par le script |
+| `Dockerfile.cronjob` | Image du CronJob Kubernetes `ahceneaiti/bash_cj:1.0` (busybox + bash + client mysql + script + `sql/`), voir section 7 |
+| `k8s/` | Manifestes Kubernetes : namespace, ConfigMap, CronJob (voir section 7) |
 
 ## Prérequis
 
 - Docker et Docker Compose v2 (`docker compose`)
 - Port `3306` libre sur la machine
+- Pour le déploiement Kubernetes (section 7) : `kubectl`, un cluster (ex. `kind`) et un accès à Docker Hub
 - Un fichier `.env` (optionnel) : `cp .env.example .env` puis adapter les valeurs (voir « Fichier `.env` » en section 4)
 
 ## 1. Lancer le conteneur
@@ -32,6 +35,8 @@ Attendre que le conteneur soit `healthy` :
 ```bash
 docker compose ps
 ```
+
+Le conteneur `ecommerce-mysql` publie le port `3306` sur l'hôte : c'est ce port que le CronJob Kubernetes (section 7) utilise pour se connecter.
 
 Arrêter (les données sont conservées dans le conteneur/volume) :
 
@@ -226,6 +231,7 @@ cp .env.example .env    # puis adapter DB_USER, DB_PASSWORD, DB_NAME, LOG_DIR
 | Variable | Défaut |
 |---|---|
 | `DB_HOST` | `localhost` |
+| `DB_PORT` | `3306` |
 | `DB_USER` | `root` |
 | `DB_PASSWORD` | `root` |
 | `DB_NAME` | `ecommerce` |
@@ -286,3 +292,43 @@ Chaque exécution ajoute un bloc dans le log du jour (voir section 5).
 
 - Le fichier `.env` contient le mot de passe : il est ignoré par git, seul `.env.example` est versionné. Les valeurs par défaut (`root`/`root`) conviennent pour un test local uniquement.
 - Le statut `ABONDONNE` est écrit tel quel (et non `ABANDONNE`) pour rester cohérent avec les données et le script.
+
+## 7. Déploiement Kubernetes (CronJob)
+
+MySQL reste dans docker compose (section 1). Le script et les requêtes tournent dans un **CronJob** Kubernetes qui se connecte à ce MySQL par le réseau (`DB_HOST`/`DB_PORT`).
+
+Image `ahceneaiti/bash_cj:1.0` : base `busybox:1.36-musl`. Busybox n'a ni bash ni client mysql : un premier stage `alpine` installe `bash`, `mariadb-client` et `mariadb-connector-c` (ce dernier fournit le plugin `caching_sha2_password`, requis par MySQL 8.4), puis ils sont copiés sur busybox. Le `ENTRYPOINT` est `select_update.sh` (sans argument : tous les jobs de `sql/`).
+
+| Fichier | Rôle |
+|---|---|
+| `Dockerfile.cronjob` | Image `ahceneaiti/bash_cj:1.0` : base busybox + bash + client mysql + `select_update.sh` + `sql/` |
+| `k8s/namespace.yaml` | Namespace `sql-updates` |
+| `k8s/configmap.yaml` | `DB_HOST`, `DB_PORT`, `DB_NAME`, `RETENTION_JOURS` |
+| `k8s/cronjob.yaml` | CronJob `0 6-22 * * *` (Europe/Paris), `concurrencyPolicy: Forbid` |
+
+Le secret (`DB_USER`, `DB_PASSWORD`) n'est pas versionné : il est créé depuis `.env`.
+
+```bash
+docker compose up -d --build                       # MySQL (port 3306 publié sur l'hôte)
+kind create cluster --name sql-updates             # si aucun cluster n'existe
+docker build -f Dockerfile.cronjob -t ahceneaiti/bash_cj:1.0 .
+docker push ahceneaiti/bash_cj:1.0                 # le cluster tire l'image depuis Docker Hub
+
+kubectl apply -f k8s/namespace.yaml -f k8s/configmap.yaml
+kubectl -n sql-updates create secret generic sql-updates-db --from-env-file=.env \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/cronjob.yaml
+kubectl -n sql-updates get cronjob                 # vérifier SCHEDULE et TIMEZONE
+```
+
+`DB_HOST` dans `k8s/configmap.yaml` doit désigner l'hôte docker vu depuis les pods : `host.minikube.internal` (minikube, driver docker) ou la passerelle du réseau docker `kind` (`docker network inspect kind`, ex. `172.18.0.1`, valeur actuelle de `k8s/configmap.yaml`). Le pare-feu de l'hôte doit laisser passer le port 3306.
+
+Test sans attendre l'horaire, puis lecture des logs (les logs sont sur stdout, le fichier du pod est un `emptyDir` jetable) :
+
+```bash
+kubectl -n sql-updates create job --from=cronjob/sql-updates test-1
+kubectl -n sql-updates logs job/test-1
+kubectl -n sql-updates delete job test-1
+```
+
+Le `crontab` de l'hôte (section 6) n'est plus nécessaire dans ce mode : ne pas cumuler les deux.
