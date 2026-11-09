@@ -21,6 +21,9 @@ spec:
             - name: select-update
               image: ahceneaiti/bash_cj:1.1
               imagePullPolicy: IfNotPresent
+              # Par défaut : tous les jobs de sql/. Pour ne lancer qu'un job planifié, décommenter
+              # (--job est répétable ; valeurs : commandes, livraisons, produits)
+              # args: ["--job", "commandes"]
               envFrom:
                 - configMapRef:
                     name: sql-updates-config

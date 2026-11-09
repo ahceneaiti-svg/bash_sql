@@ -112,7 +112,7 @@ kubectl create -f k8s/job-manuel.yaml
 kubectl -n sql-updates get jobs
 ```
 
-Pour fixer le job du CronJob planifié lui-même, ajouter dans `cronjob.yaml`, sous le conteneur : `args: ["--job", "commandes"]`.
+Pour que le CronJob planifié ne lance qu'un job, décommenter la ligne `args: ["--job", "commandes"]` dans `cronjob.yaml` (sous `imagePullPolicy`), puis `kubectl apply -f k8s/cronjob.yaml`. Les `--job` sont répétables.
 
 ## 8. Exploitation
 
