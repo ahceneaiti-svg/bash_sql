@@ -167,7 +167,10 @@ docker compose exec mysql mysql -uroot -proot ecommerce \
 
 ## 4. Lancer le script (CronJob Kubernetes)
 
-Le script est lancé par le CronJob `sql-updates` (toutes les heures pleines de 6h à 22h, voir `k8s/README.md`). Pour un lancement immédiat, hors planification :
+Deux façons de traiter, dans les deux cas par un Pod créé par un Job :
+
+- **Automatique** : le CronJob `sql-updates` crée un Job (puis son Pod) à chaque heure pleine de 6h à 22h.
+- **Manuel** : vous créez vous-même un Job (puis son Pod), hors planification :
 
 ```bash
 k8s/run-job.sh                  # tous les jobs

@@ -23,6 +23,33 @@ cluster kind "sql-updates"                      hôte docker
 
 Le secret est lu par le CronJob (`secretKeyRef`), la configuration par `envFrom` du ConfigMap.
 
+## Traitement automatique et traitement manuel
+
+Dans les deux cas, le traitement est fait par un **Pod** créé par un **Job** ; seul change celui qui crée le Job.
+
+| | Automatique | Manuel |
+|---|---|---|
+| Déclencheur | L'horaire du CronJob (`0 6-22 * * *`) | Une commande : `k8s/run-job.sh` ou `kubectl create -f k8s/job-manuel.yaml` |
+| Qui crée le Job | Le **CronJob** `sql-updates`, à chaque échéance | **Vous** (le Job est créé à la main) |
+| Qui crée le Pod | Le Job | Le Job |
+| Nom du Job | `sql-updates-<horodatage>` | `manuel-<horodatage>` (run-job.sh) ou `sql-updates-manuel-<suffixe>` (job-manuel.yaml) |
+| Jobs lancés | Tous (ou ceux de `args`) | Tous, ou un seul / une liste avec `--job` |
+| Nettoyage | Historique : 3 réussis, 3 échoués | `run-job.sh` supprime le Job ; `job-manuel.yaml` expire après 1 h |
+
+```
+Automatique :  CronJob  ->  Job  ->  Pod  ->  select_update.sh
+Manuel      :  vous     ->  Job  ->  Pod  ->  select_update.sh
+```
+
+Les deux Jobs utilisent la même image, le même ConfigMap et le même Secret. Pour voir qui a créé chaque objet :
+
+```bash
+kubectl -n sql-updates get cronjob,jobs,pods
+kubectl -n sql-updates get jobs -o custom-columns=JOB:.metadata.name,CREE_PAR:.metadata.ownerReferences[0].kind
+```
+
+Exemple : le Job `sql-updates-29903940` a pour parent `CronJob/sql-updates` (exécution automatique), le Job `sql-updates-manuel-jmdtg` n'a aucun parent (créé à la main) ; dans les deux cas le Pod a pour parent le Job.
+
 ## Prérequis
 
 - `docker`, `kubectl`, `kind`, `python3` (utilisé par `run-job.sh`)
@@ -84,7 +111,7 @@ kubectl -n sql-updates get cronjob      # SCHEDULE 0 6-22 * * *, TIMEZONE Europe
 
 Changer le mot de passe : modifier `.env`, relancer la commande du secret. Les prochains pods lisent la nouvelle valeur. Changer le ConfigMap : `kubectl apply -f k8s/configmap.yaml` (pris en compte au prochain lancement).
 
-## 6. Tester sans attendre l'horaire
+## 6. Tester sans attendre l'horaire (traitement manuel)
 
 ```bash
 kubectl -n sql-updates create job --from=cronjob/sql-updates test-1
