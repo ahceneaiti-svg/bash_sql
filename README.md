@@ -23,7 +23,7 @@ Détails, explications et dépannage : `k8s/README.md`.
 
 | Fichier | Rôle |
 |---|---|
-| `Dockerfile` | Image `mysql:8.4` + `init.sql` (serveur MySQL ; embarque aussi `select_update.sh` et `sql/`, non utilisés depuis le passage au CronJob) |
+| `Dockerfile` | Image `mysql:8.4` + `init.sql` (serveur MySQL uniquement) |
 | `docker-compose.yml` | Service `mysql` (port 3306, healthcheck) |
 | `.env.example` | Modèle de configuration (utilisateur, mot de passe, base) : lu par docker compose et par le secret Kubernetes |
 | `init_user.sh` | Crée `DB_USER` s’il n’est pas `root` |
